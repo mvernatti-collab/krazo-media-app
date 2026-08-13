@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // NOTE: This app uses a simple in-app passcode, not Firebase Auth, so
+    // these rules can't check "is this an admin" the way real auth would.
+    // This open rule relies on the passcode screen in the app itself and
+    // on this config not being shared outside your program. It's fine for
+    // a small team tool, but isn't hardened security. See README for how
+    // to tighten this later with Firebase Auth if you ever need to.
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
