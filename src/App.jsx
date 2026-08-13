@@ -902,6 +902,7 @@ function AdminPanel({
   const [reminderSaved, setReminderSaved] = useState(false);
   const fileInputRef = useRef(null);
   const rosterFileInputRef = useRef(null);
+  const modalScrollRef = useRef(null);
 
   const saveCodes = () => {
     if (!studentCode.trim() || !adminCode.trim()) return;
@@ -978,11 +979,16 @@ function AdminPanel({
 
   const sortedStreams = [...streams].sort((a, b) => parseStreamDateTime(a) - parseStreamDateTime(b));
 
-  const awayBroadcasts = streams.filter((s) => s.site === "Away" && s.sportKey !== SPECIAL_EVENT_SPORT && !s.openSignup);
+  const effectiveRoles = (s) =>
+    Array.isArray(s.openRoles) ? s.openRoles : (s.needsVideoBoard ? ALL_ROLES : ROLES);
+
+  const awayWithOpenPositions = streams.filter(
+    (s) => s.site === "Away" && s.sportKey !== SPECIAL_EVENT_SPORT && !s.openSignup && effectiveRoles(s).length > 0
+  );
   const fixAwayBroadcasts = () => {
-    if (awayBroadcasts.length === 0) return;
-    if (!window.confirm(`Switch ${awayBroadcasts.length} away game(s) from Live Streamed to Content Only? This swaps their crew role sign-up for the open-call sign-up instead.`)) return;
-    awayBroadcasts.forEach((s) => onUpdate(s.id, { openSignup: true }));
+    if (awayWithOpenPositions.length === 0) return;
+    if (!window.confirm(`Clear open crew positions on ${awayWithOpenPositions.length} away game(s)? Crew sign-up stays available on each — this just starts them at zero open positions instead of the full list. You can open specific positions back up per event any time.`)) return;
+    awayWithOpenPositions.forEach((s) => onUpdate(s.id, { openRoles: [], needsVideoBoard: false }));
   };
 
   const downloadTemplate = () => {
@@ -1064,6 +1070,7 @@ function AdminPanel({
         : (s.needsVideoBoard ? ALL_ROLES : ROLES),
       includeInBoard: s.includeInBoard !== false,
     });
+    if (modalScrollRef.current) modalScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const toggleFormRole = (role) => {
@@ -1076,8 +1083,14 @@ function AdminPanel({
   const resetForm = () => { setEditingId(null); setForm(emptyEventForm()); };
 
   const setSite = (site) => {
-    // Home defaults to included; Away defaults to excluded — both fully editable below.
-    setForm((f) => ({ ...f, site, includeInBoard: editingId ? f.includeInBoard : site === "Home" }));
+    // New events: Home defaults to included + full crew; Away defaults to excluded + no positions.
+    // Editing an existing event never auto-resets these — only the person editing chooses to change them.
+    setForm((f) => ({
+      ...f,
+      site,
+      includeInBoard: editingId ? f.includeInBoard : site === "Home",
+      openRoles: editingId ? f.openRoles : (site === "Home" ? [...ROLES] : []),
+    }));
   };
 
   const submit = () => {
@@ -1128,7 +1141,7 @@ function AdminPanel({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto px-4 py-6" onClick={onClose}>
+    <div ref={modalScrollRef} className="fixed inset-0 z-50 bg-black/40 overflow-y-auto px-4 py-6" onClick={onClose}>
       <div
         className="w-full max-w-lg mx-auto rounded-md border"
         style={{ backgroundColor: "#FFFFFF", borderColor: "#E2E5EA" }}
@@ -1169,20 +1182,20 @@ function AdminPanel({
         <div className="p-4 space-y-4">
           {adminTab === "schedule" && (
             <>
-          {awayBroadcasts.length > 0 && (
+          {awayWithOpenPositions.length > 0 && (
             <div className="rounded border px-3 py-3 space-y-2" style={{ borderColor: "#ED1C24", backgroundColor: "#ED1C2411" }}>
               <div className="text-[10px] uppercase tracking-[0.15em] text-[#ED1C24]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                 Quick Fix
               </div>
               <p className="text-[11px] text-[#14171C]">
-                {awayBroadcasts.length} away game{awayBroadcasts.length === 1 ? " is" : "s are"} currently set to Live Streamed, showing crew role sign-up even though they aren't broadcast. Switch them to Content Only instead — you can still fine-tune each one individually below.
+                {awayWithOpenPositions.length} away game{awayWithOpenPositions.length === 1 ? " has" : "s have"} open crew positions students can sign up for, even though nothing's actually being covered. Clear them to zero — sign-up stays available on each, you'll just need to manually open the specific positions you actually want covered.
               </p>
               <button
                 onClick={fixAwayBroadcasts}
                 className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
                 style={{ backgroundColor: "#ED1C24", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
               >
-                Switch All {awayBroadcasts.length} to Content Only
+                Clear Positions on All {awayWithOpenPositions.length}
               </button>
             </div>
           )}
@@ -1311,20 +1324,36 @@ function AdminPanel({
               />
             </div>
 
+            <div className="rounded border px-2.5 py-2" style={{ borderColor: "#1D6FBD", backgroundColor: "#1D6FBD11" }}>
+              <label className="flex items-center gap-2 text-xs font-medium text-[#14171C]">
+                <input
+                  type="checkbox" checked={form.includeInBoard}
+                  onChange={(e) => setForm((f) => ({ ...f, includeInBoard: e.target.checked }))}
+                />
+                Include on Stream / Content Board
+              </label>
+              <p className="text-[10px] text-[#6B7280] mt-1 pl-6">
+                Every event shows on the Calendar regardless. Home games default to included; Away games default to excluded. This checkbox is always editable, on new events and existing ones — flip it any time to add or remove an event from the board.
+              </p>
+            </div>
+
             <div className="flex flex-col gap-1.5 pt-1">
+              <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                Sign-Up Type
+              </span>
               <label className="flex items-center gap-2 text-xs text-[#14171C]">
                 <input
                   type="radio" name="kind" checked={form.kind === "broadcast"}
                   onChange={() => setForm((f) => ({ ...f, kind: "broadcast" }))}
                 />
-                Live streamed (home broadcast — crew role sign-up)
+                Crew role sign-up (specific positions, listed below)
               </label>
               <label className="flex items-center gap-2 text-xs text-[#14171C]">
                 <input
                   type="radio" name="kind" checked={form.kind === "content"}
                   onChange={() => setForm((f) => ({ ...f, kind: "content" }))}
                 />
-                Content only (open call — no broadcast)
+                Open call sign-up (anyone adds their own name — no fixed positions)
               </label>
             </div>
 
@@ -1332,13 +1361,16 @@ function AdminPanel({
               <div className="rounded border px-2.5 py-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                    Open Positions for This Event
+                    Open Positions for This Event ({form.openRoles.length} of {ALL_ROLES.length} open)
                   </span>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setForm((f) => ({ ...f, openRoles: [...ALL_ROLES] }))} className="text-[10px] text-[#1D6FBD]">All</button>
                     <button type="button" onClick={() => setForm((f) => ({ ...f, openRoles: [] }))} className="text-[10px] text-[#6B7280]">None</button>
                   </div>
                 </div>
+                <p className="text-[10px] text-[#6B7280] mb-1.5">
+                  Uncheck everything to keep sign-up available but show zero open positions until you add specific ones — handy for away games you only sometimes cover.
+                </p>
                 <div className="grid grid-cols-2 gap-x-2 gap-y-1">
                   {ALL_ROLES.map((role) => (
                     <label key={role} className="flex items-center gap-1.5 text-xs text-[#14171C]">
@@ -1353,19 +1385,6 @@ function AdminPanel({
                 </div>
               </div>
             )}
-
-            <div className="rounded border px-2.5 py-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
-              <label className="flex items-center gap-2 text-xs font-medium text-[#14171C]">
-                <input
-                  type="checkbox" checked={form.includeInBoard}
-                  onChange={(e) => setForm((f) => ({ ...f, includeInBoard: e.target.checked }))}
-                />
-                Include on Stream / Content Board
-              </label>
-              <p className="text-[10px] text-[#6B7280] mt-1 pl-6">
-                Every event shows on the Calendar regardless. Home games default to included. Away games default to excluded — check this to still put crew or a photographer on it (like an away tournament or a Girls Tennis Senior Night you want covered).
-              </p>
-            </div>
 
             <div className="flex items-center gap-2 pt-1">
               <button
