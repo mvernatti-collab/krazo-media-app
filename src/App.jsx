@@ -23,6 +23,7 @@ const ROLES = [
   "Photographer", "Videographer", "Audio - Play by Play", "Audio - Analyst",
 ];
 const VIDEO_BOARD_ROLE = "Video Board Operator";
+const ALL_ROLES = [...ROLES, VIDEO_BOARD_ROLE];
 const ROLE_NOTES = { "Producer/Switcher": "Student lead who runs switcher program" };
 
 const STAGES = [
@@ -91,19 +92,23 @@ function sportOrderIndex(sportKey) {
 }
 const SPORT_SUGGESTIONS = [...SPORT_ORDER, "Basketball (Boys)", "Basketball (Girls)", "Wrestling", "Swim & Dive", "Baseball", "Track & Field"];
 
-const CATEGORY_COLORS = { livestream: "#1D6FBD", content: "#A66A08", special: "#7C3AED" };
+const CATEGORY_COLORS = { livestream: "#ED1C24", content: "#14171C", special: "#7C3AED" };
 const CATEGORY_LABELS = { livestream: "Livestream", content: "Content Only", special: "Special Event" };
 function eventCategory(ev) {
   if (ev.sportKey === SPECIAL_EVENT_SPORT) return "special";
   return ev.openSignup ? "content" : "livestream";
 }
 
-const mk = (id, sportKey, opponent, site, date, time, opts = {}) => ({
-  id, title: `Varsity ${sportKey}`, sportKey, opponent, site, date, time,
-  status: "upcoming", roles: { ...emptyRoles }, evaluations: [],
-  openSignup: false, attendees: [], needsVideoBoard: false, includeInBoard: true,
-  ...opts,
-});
+const mk = (id, sportKey, opponent, site, date, time, opts = {}) => {
+  const needsVideoBoard = opts.needsVideoBoard || false;
+  return {
+    id, title: `Varsity ${sportKey}`, sportKey, opponent, site, date, time,
+    status: "upcoming", roles: { ...emptyRoles }, evaluations: [],
+    openSignup: false, attendees: [], needsVideoBoard, includeInBoard: true,
+    openRoles: needsVideoBoard ? ALL_ROLES : ROLES,
+    ...opts,
+  };
+};
 
 const initialStreams = [
   // Football
@@ -204,7 +209,9 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
   const [attendeeName, setAttendeeName] = useState("");
   const [attendeeEmail, setAttendeeEmail] = useState("");
 
-  const roleList = stream.needsVideoBoard ? [...ROLES, VIDEO_BOARD_ROLE] : ROLES;
+  const roleList = Array.isArray(stream.openRoles)
+    ? stream.openRoles
+    : (stream.needsVideoBoard ? [...ROLES, VIDEO_BOARD_ROLE] : ROLES);
   const filledCount = roleList.filter((r) => stream.roles[r]).length;
   const isOpenCall = stream.openSignup;
   const dotColor = isOpenCall ? "#F2A93B" : meta.color;
@@ -340,6 +347,9 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
             <div className="text-[10px] uppercase tracking-[0.15em] text-[#14171C] mb-2" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
               Crew Sign-Up
             </div>
+            {roleList.length === 0 ? (
+              <p className="text-xs text-[#6B7280]">No positions have been opened for this event yet.</p>
+            ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {roleList.map((role) => {
                 const taken = stream.roles[role];
@@ -404,6 +414,7 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
                 );
               })}
             </div>
+            )}
           </div>
           )}
 
@@ -868,7 +879,7 @@ function LinksView({ links, onAdd, onDelete }) {
 function emptyEventForm() {
   return {
     category: "sport", sportKey: "", customTitle: "", opponent: "", site: "Home",
-    date: "", time: "", kind: "broadcast", needsVideoBoard: false, includeInBoard: true,
+    date: "", time: "", kind: "broadcast", openRoles: [...ROLES], includeInBoard: true,
   };
 }
 
@@ -967,6 +978,13 @@ function AdminPanel({
 
   const sortedStreams = [...streams].sort((a, b) => parseStreamDateTime(a) - parseStreamDateTime(b));
 
+  const awayBroadcasts = streams.filter((s) => s.site === "Away" && s.sportKey !== SPECIAL_EVENT_SPORT && !s.openSignup);
+  const fixAwayBroadcasts = () => {
+    if (awayBroadcasts.length === 0) return;
+    if (!window.confirm(`Switch ${awayBroadcasts.length} away game(s) from Live Streamed to Content Only? This swaps their crew role sign-up for the open-call sign-up instead.`)) return;
+    awayBroadcasts.forEach((s) => onUpdate(s.id, { openSignup: true }));
+  };
+
   const downloadTemplate = () => {
     const csv = [
       "category,sport,title,opponent,site,date,time,kind,needsvideoboard,includeinboard",
@@ -1021,7 +1039,7 @@ function AdminPanel({
             id: "ev" + Date.now() + Math.random().toString(36).slice(2, 7),
             sportKey, title, opponent, site, date, time,
             openSignup: kind === "content",
-            needsVideoBoard, includeInBoard,
+            needsVideoBoard, openRoles: needsVideoBoard ? ALL_ROLES : ROLES, includeInBoard,
             status: "upcoming", roles: { ...emptyRoles }, evaluations: [], attendees: [],
           });
           added++;
@@ -1040,9 +1058,19 @@ function AdminPanel({
       sportKey: isSpecial ? "" : s.sportKey,
       customTitle: isSpecial ? s.title : "",
       opponent: s.opponent, site: s.site, date: s.date, time: s.time,
-      kind: s.openSignup ? "content" : "broadcast", needsVideoBoard: !!s.needsVideoBoard,
+      kind: s.openSignup ? "content" : "broadcast",
+      openRoles: Array.isArray(s.openRoles)
+        ? s.openRoles
+        : (s.needsVideoBoard ? ALL_ROLES : ROLES),
       includeInBoard: s.includeInBoard !== false,
     });
+  };
+
+  const toggleFormRole = (role) => {
+    setForm((f) => ({
+      ...f,
+      openRoles: f.openRoles.includes(role) ? f.openRoles.filter((r) => r !== role) : [...f.openRoles, role],
+    }));
   };
 
   const resetForm = () => { setEditingId(null); setForm(emptyEventForm()); };
@@ -1068,7 +1096,8 @@ function AdminPanel({
           date: form.date.trim(),
           time: form.time.trim() || "TBA",
           openSignup: form.kind === "content",
-          needsVideoBoard: form.needsVideoBoard,
+          openRoles: form.openRoles,
+          needsVideoBoard: form.openRoles.includes(VIDEO_BOARD_ROLE),
           includeInBoard: form.includeInBoard,
         }
       : {
@@ -1079,7 +1108,8 @@ function AdminPanel({
           date: form.date.trim(),
           time: form.time.trim() || "TBA",
           openSignup: form.kind === "content",
-          needsVideoBoard: form.needsVideoBoard,
+          openRoles: form.openRoles,
+          needsVideoBoard: form.openRoles.includes(VIDEO_BOARD_ROLE),
           includeInBoard: form.includeInBoard,
         };
     if (editingId) {
@@ -1139,6 +1169,24 @@ function AdminPanel({
         <div className="p-4 space-y-4">
           {adminTab === "schedule" && (
             <>
+          {awayBroadcasts.length > 0 && (
+            <div className="rounded border px-3 py-3 space-y-2" style={{ borderColor: "#ED1C24", backgroundColor: "#ED1C2411" }}>
+              <div className="text-[10px] uppercase tracking-[0.15em] text-[#ED1C24]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                Quick Fix
+              </div>
+              <p className="text-[11px] text-[#14171C]">
+                {awayBroadcasts.length} away game{awayBroadcasts.length === 1 ? " is" : "s are"} currently set to Live Streamed, showing crew role sign-up even though they aren't broadcast. Switch them to Content Only instead — you can still fine-tune each one individually below.
+              </p>
+              <button
+                onClick={fixAwayBroadcasts}
+                className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
+                style={{ backgroundColor: "#ED1C24", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                Switch All {awayBroadcasts.length} to Content Only
+              </button>
+            </div>
+          )}
+
           {/* Bulk CSV import */}
           <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
             <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -1278,15 +1326,33 @@ function AdminPanel({
                 />
                 Content only (open call — no broadcast)
               </label>
-              <label className="flex items-center gap-2 text-xs text-[#14171C] pt-1">
-                <input
-                  type="checkbox" checked={form.needsVideoBoard}
-                  onChange={(e) => setForm((f) => ({ ...f, needsVideoBoard: e.target.checked }))}
-                  disabled={form.kind === "content"}
-                />
-                Needs Video Board Operator
-              </label>
             </div>
+
+            {form.kind === "broadcast" && (
+              <div className="rounded border px-2.5 py-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                    Open Positions for This Event
+                  </span>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setForm((f) => ({ ...f, openRoles: [...ALL_ROLES] }))} className="text-[10px] text-[#1D6FBD]">All</button>
+                    <button type="button" onClick={() => setForm((f) => ({ ...f, openRoles: [] }))} className="text-[10px] text-[#6B7280]">None</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                  {ALL_ROLES.map((role) => (
+                    <label key={role} className="flex items-center gap-1.5 text-xs text-[#14171C]">
+                      <input
+                        type="checkbox"
+                        checked={form.openRoles.includes(role)}
+                        onChange={() => toggleFormRole(role)}
+                      />
+                      {role}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="rounded border px-2.5 py-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
               <label className="flex items-center gap-2 text-xs font-medium text-[#14171C]">
