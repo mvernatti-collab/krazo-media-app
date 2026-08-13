@@ -73,6 +73,13 @@ function parseBool(val, fallback) {
 }
 
 const SPECIAL_EVENT_SPORT = "Special Event";
+
+const TABS = [
+  { key: "live", label: "Stream Board", shortLabel: "Streams", icon: Camera },
+  { key: "calendar", label: "Calendar", shortLabel: "Calendar", icon: Calendar },
+  { key: "content", label: "Content Board", shortLabel: "Content", icon: Clapperboard },
+  { key: "links", label: "Links", shortLabel: "Links", icon: ExternalLink },
+];
 const SPORT_ABBR = { Football: "FB", Volleyball: "VB", "Boys Soccer": "SOC", Softball: "SB", [SPECIAL_EVENT_SPORT]: "EVT" };
 function sportAbbr(sportKey) {
   return SPORT_ABBR[sportKey] || sportKey.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase();
@@ -474,10 +481,19 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
   );
 }
 
-function JobCard({ job, onMove, onDelete, onLinkChange }) {
+function JobCard({ job, onMove, onDelete, onLinkChange, onAssign, onUnassign }) {
   const stageIdx = STAGES.findIndex((s) => s.key === job.stage);
   const Icon = TYPE_ICON[job.type] || FileVideo;
   const showLoad = job.stage === "review" || job.stage === "published";
+  const [claiming, setClaiming] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+
+  const submitClaim = () => {
+    if (!nameInput.trim()) return;
+    onAssign(job.id, nameInput.trim());
+    setClaiming(false);
+    setNameInput("");
+  };
 
   return (
     <div className="rounded-md border px-3 py-3 space-y-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
@@ -491,7 +507,37 @@ function JobCard({ job, onMove, onDelete, onLinkChange }) {
         </button>
       </div>
       <div className="flex items-center gap-2 text-[11px] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-        <span className="px-1.5 py-0.5 rounded bg-[#EEF1F4] border border-[#E2E5EA]">{job.assignee || "Unassigned"}</span>
+        {job.assignee && !claiming ? (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#EEF1F4] border border-[#E2E5EA]">
+            {job.assignee}
+            <button onClick={() => onUnassign(job.id)} className="text-[#6B7280] hover:text-[#E8362E]">
+              <X size={11} />
+            </button>
+          </span>
+        ) : claiming ? (
+          <span className="flex items-center gap-1">
+            <input
+              autoFocus
+              list="roster-names-jobs"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submitClaim()}
+              placeholder="Your name"
+              className="bg-transparent border-b text-[11px] text-[#14171C] placeholder-[#6B7280] outline-none w-24"
+              style={{ borderColor: "#3E8EDE" }}
+            />
+            <button onClick={submitClaim} className="text-[#3EC28F]"><CheckCircle2 size={14} /></button>
+            <button onClick={() => setClaiming(false)} className="text-[#6B7280]"><X size={14} /></button>
+          </span>
+        ) : (
+          <button
+            onClick={() => setClaiming(true)}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded border"
+            style={{ borderColor: "#1D6FBD", color: "#1D6FBD" }}
+          >
+            <Circle size={10} /> Pick up this job
+          </button>
+        )}
         <span>Due {job.due}</span>
       </div>
 
@@ -568,7 +614,7 @@ function AddJobModal({ onClose, onAdd }) {
           {Object.keys(TYPE_ICON).map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         <input
-          value={assignee} onChange={(e) => setAssignee(e.target.value)} placeholder="Assignee"
+          value={assignee} onChange={(e) => setAssignee(e.target.value)} placeholder="Assignee (optional — leave blank for anyone to pick up)"
           className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
           style={{ borderColor: "#E2E5EA" }}
         />
@@ -1660,6 +1706,8 @@ export default function App() {
   const deleteJob = (id) => deleteDoc(doc(db, "jobs", id));
   const linkChange = (id, link) => updateDoc(doc(db, "jobs", id), { link });
   const addJob = (job) => setDoc(doc(db, "jobs", job.id), job);
+  const assignJob = (id, name) => updateDoc(doc(db, "jobs", id), { assignee: name });
+  const unassignJob = (id) => updateDoc(doc(db, "jobs", id), { assignee: "" });
 
   const setPasscodes = (newPasscodes) => setDoc(doc(db, "settings", "app"), { passcodes: newPasscodes }, { merge: true });
   const setReminderHours = (n) => setDoc(doc(db, "settings", "app"), { reminderHours: n }, { merge: true });
@@ -1712,14 +1760,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tab / tally switcher */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex gap-1 pb-2">
-          {[
-            { key: "live", label: "Stream Board", icon: Camera },
-            { key: "calendar", label: "Calendar", icon: Calendar },
-            { key: "content", label: "Content Board", icon: Clapperboard },
-            { key: "links", label: "Links", icon: ExternalLink },
-          ].map(({ key, label, icon: Icon }) => {
+        {/* Tab / tally switcher — desktop only, mobile uses the bottom nav bar */}
+        <div className="hidden sm:flex max-w-5xl mx-auto px-4 sm:px-6 gap-1 pb-2">
+          {TABS.map(({ key, label, icon: Icon }) => {
             const active = tab === key;
             return (
               <button
@@ -1741,7 +1784,7 @@ export default function App() {
       </div>
 
       {/* Body */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 sm:pb-6">
         {tab === "live" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between mb-1 flex-wrap gap-y-2">
@@ -1808,6 +1851,9 @@ export default function App() {
 
         {tab === "content" && (
           <div>
+            <datalist id="roster-names-jobs">
+              {roster.map((r) => <option key={r.id} value={r.name} />)}
+            </datalist>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-[11px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                 Production Pipeline
@@ -1834,7 +1880,15 @@ export default function App() {
                     </div>
                     <div className="space-y-2 min-h-[60px]">
                       {stageJobs.map((job) => (
-                        <JobCard key={job.id} job={job} onMove={moveJob} onDelete={deleteJob} onLinkChange={linkChange} />
+                        <JobCard
+                          key={job.id}
+                          job={job}
+                          onMove={moveJob}
+                          onDelete={deleteJob}
+                          onLinkChange={linkChange}
+                          onAssign={assignJob}
+                          onUnassign={unassignJob}
+                        />
                       ))}
                       {stageJobs.length === 0 && (
                         <div className="rounded border border-dashed px-3 py-4 text-center text-[11px] text-[#14171C] opacity-50" style={{ borderColor: "#E2E5EA" }}>
@@ -1886,6 +1940,31 @@ export default function App() {
       })()}
 
       {showAddJob && <AddJobModal onClose={() => setShowAddJob(false)} onAdd={addJob} />}
+
+      {/* Mobile bottom nav — hidden on desktop, fixed on small screens */}
+      <div
+        className="sm:hidden fixed bottom-0 left-0 right-0 z-40 flex border-t"
+        style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFFf7", backdropFilter: "blur(6px)", paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {TABS.map(({ key, shortLabel, icon: Icon }) => {
+          const active = tab === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5"
+            >
+              <Icon size={20} color={active ? "#E8362E" : "#6B7280"} />
+              <span
+                className="text-[9px] uppercase tracking-wide font-medium"
+                style={{ color: active ? "#14171C" : "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                {shortLabel}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
       {showAdmin && accessLevel === "admin" && (
         <AdminPanel
