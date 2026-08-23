@@ -65,6 +65,12 @@ function parseStreamDateTime(s) {
 function sameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
+function isPastDate(stream) {
+  const eventDate = parseStreamDate(stream.date);
+  const today = new Date();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return eventDate.getTime() < todayMidnight.getTime();
+}
 function parseBool(val, fallback) {
   if (val === undefined || val === null || String(val).trim() === "") return fallback;
   const v = String(val).trim().toLowerCase();
@@ -1817,6 +1823,19 @@ export default function App() {
     ];
     return () => unsubs.forEach((u) => u());
   }, [dataReady]);
+
+  // Auto-complete: once an event's calendar date is in the past, flip it to
+  // "complete" so it moves to the Completed tab without needing a manual edit.
+  // "Live" is included here too, so a stale on-air flag doesn't linger forever —
+  // but only once the date itself has passed, never mid-broadcast that same day.
+  useEffect(() => {
+    if (!dataReady || streams.length === 0) return;
+    const toComplete = streams.filter((s) => s.status !== "complete" && isPastDate(s));
+    if (toComplete.length === 0) return;
+    const batch = writeBatch(db);
+    toComplete.forEach((s) => batch.update(doc(db, "streams", s.id), { status: "complete" }));
+    batch.commit();
+  }, [dataReady, streams]);
 
   if (!dataReady) {
     return (
