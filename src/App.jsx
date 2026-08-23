@@ -72,6 +72,18 @@ function parseBool(val, fallback) {
   if (["false", "no", "n", "0"].includes(v)) return false;
   return fallback;
 }
+function genPin() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+function getRoleFills(stream, role) {
+  const v = stream.roles ? stream.roles[role] : null;
+  if (Array.isArray(v)) return v;
+  if (v && v.name) return [v];
+  return [];
+}
+function getRoleSlots(stream, role) {
+  return (stream.roleSlots && stream.roleSlots[role]) || 1;
+}
 
 const SPECIAL_EVENT_SPORT = "Special Event";
 
@@ -106,6 +118,7 @@ const mk = (id, sportKey, opponent, site, date, time, opts = {}) => {
     status: "upcoming", roles: { ...emptyRoles }, evaluations: [],
     openSignup: false, attendees: [], needsVideoBoard, includeInBoard: true,
     openRoles: needsVideoBoard ? ALL_ROLES : ROLES,
+    roleSlots: Object.fromEntries(ALL_ROLES.map((r) => [r, 1])),
     ...opts,
   };
 };
@@ -198,50 +211,41 @@ function statusMeta(status) {
   return { color: "#5B6472", text: "#5B6472", label: "Wrapped", pulse: false };
 }
 
-function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEval, onAddAttendee, roster = [] }) {
+function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEval, onAddAttendee, onRemoveAttendee, roster = [], studentIdentity, accessLevel, onRequireSignIn }) {
   const meta = statusMeta(stream.status);
-  const [claimingRole, setClaimingRole] = useState(null);
-  const [nameInput, setNameInput] = useState("");
-  const [emailInput, setEmailInput] = useState("");
   const [rating, setRating] = useState({ video: 0, audio: 0, commentary: 0, overall: 0 });
   const [notes, setNotes] = useState("");
-  const [evaluator, setEvaluator] = useState("");
-  const [attendeeName, setAttendeeName] = useState("");
-  const [attendeeEmail, setAttendeeEmail] = useState("");
 
   const roleList = Array.isArray(stream.openRoles)
     ? stream.openRoles
     : (stream.needsVideoBoard ? [...ROLES, VIDEO_BOARD_ROLE] : ROLES);
-  const filledCount = roleList.filter((r) => stream.roles[r]).length;
+  const totalSlots = roleList.reduce((sum, r) => sum + getRoleSlots(stream, r), 0);
+  const filledCount = roleList.reduce((sum, r) => sum + getRoleFills(stream, r).length, 0);
   const isOpenCall = stream.openSignup;
   const dotColor = isOpenCall ? "#F2A93B" : meta.color;
   const labelColor = isOpenCall ? "#A66A08" : meta.text;
   const statusLabel = isOpenCall ? "Open Call" : meta.label;
 
-  const rosterEmailFor = (name) => {
-    const match = roster.find((r) => r.name.trim().toLowerCase() === name.trim().toLowerCase());
-    return match ? match.email : "";
+  const claimRoleSlot = (role) => {
+    if (!studentIdentity) { onRequireSignIn(); return; }
+    onClaim(stream.id, role, studentIdentity.name, studentIdentity.email);
   };
 
-  const submitClaim = (role) => {
-    if (!nameInput.trim()) return;
-    onClaim(stream.id, role, nameInput.trim(), emailInput.trim());
-    setClaimingRole(null);
-    setNameInput("");
-    setEmailInput("");
+  const canRemove = (name) => accessLevel === "admin" || (studentIdentity && studentIdentity.name === name);
+
+  const joinOpenCall = () => {
+    if (!studentIdentity) { onRequireSignIn(); return; }
+    if (stream.attendees.some((a) => a.name === studentIdentity.name)) return;
+    onAddAttendee(stream.id, { name: studentIdentity.name, email: studentIdentity.email });
   };
 
-  const submitAttendee = () => {
-    if (!attendeeName.trim()) return;
-    onAddAttendee(stream.id, { name: attendeeName.trim(), email: attendeeEmail.trim() });
-    setAttendeeName("");
-    setAttendeeEmail("");
+  const removeAttendee = (name) => {
+    onRemoveAttendee(stream.id, name);
   };
 
   const submitEvaluation = () => {
-    if (!evaluator.trim()) return;
-    onSubmitEval(stream.id, { evaluator: evaluator.trim(), ...rating, notes });
-    setEvaluator("");
+    if (!studentIdentity) { onRequireSignIn(); return; }
+    onSubmitEval(stream.id, { evaluator: studentIdentity.name, ...rating, notes });
     setNotes("");
     setRating({ video: 0, audio: 0, commentary: 0, overall: 0 });
   };
@@ -277,7 +281,7 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
             {isOpenCall ? (
               <span className="flex items-center gap-1"><Users size={11} />{stream.attendees.length} signed up</span>
             ) : (
-              <span className="flex items-center gap-1"><Users size={11} />{filledCount}/{roleList.length} filled</span>
+              <span className="flex items-center gap-1"><Users size={11} />{filledCount}/{totalSlots} filled</span>
             )}
           </div>
         </div>
@@ -288,9 +292,6 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
 
       {expanded && (
         <div className="border-t px-4 py-4 space-y-5" style={{ borderColor: "#E2E5EA" }}>
-          <datalist id="roster-names">
-            {roster.map((r) => <option key={r.id} value={r.name} />)}
-          </datalist>
           {isOpenCall ? (
             <div>
               <div className="text-[10px] uppercase tracking-[0.15em] text-[#14171C] mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -299,35 +300,17 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
               <p className="text-xs text-[#6B7280] mb-3">
                 No broadcast this night — I'd like everyone available to sign up. I'll have cameras there to get content and get familiar with them. We have one week before our first home game.
               </p>
-              <div className="rounded border px-3 py-3 space-y-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
-                <input
-                  list="roster-names"
-                  value={attendeeName}
-                  onChange={(e) => {
-                    setAttendeeName(e.target.value);
-                    const match = rosterEmailFor(e.target.value);
-                    if (match) setAttendeeEmail(match);
-                  }}
-                  placeholder="Your name"
-                  className="w-full bg-transparent border-b text-sm text-[#14171C] placeholder-[#6B7280] outline-none pb-1"
-                  style={{ borderColor: "#E2E5EA" }}
-                />
-                <input
-                  value={attendeeEmail}
-                  onChange={(e) => setAttendeeEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submitAttendee()}
-                  placeholder="Email (for reminders)"
-                  className="w-full bg-transparent border-b text-sm text-[#14171C] placeholder-[#6B7280] outline-none pb-1"
-                  style={{ borderColor: "#E2E5EA" }}
-                />
+              {studentIdentity && stream.attendees.some((a) => a.name === studentIdentity.name) ? (
+                <p className="text-xs text-[#178A5E]">You're signed up, {studentIdentity.name}.</p>
+              ) : (
                 <button
-                  onClick={submitAttendee}
+                  onClick={joinOpenCall}
                   className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
                   style={{ backgroundColor: "#F2A93B22", color: "#A66A08", fontFamily: "'IBM Plex Mono', monospace" }}
                 >
-                  I'm In
+                  {studentIdentity ? "I'm In" : "Sign In to Join"}
                 </button>
-              </div>
+              )}
 
               {stream.attendees.length > 0 && (
                 <div className="mt-3 space-y-1.5">
@@ -335,8 +318,13 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
                     Signed Up ({stream.attendees.length})
                   </div>
                   {stream.attendees.map((a, i) => (
-                    <div key={i} className="rounded border px-3 py-2" style={{ borderColor: "#E2E5EA" }}>
+                    <div key={i} className="flex items-center justify-between rounded border px-3 py-2" style={{ borderColor: "#E2E5EA" }}>
                       <span className="text-sm text-[#14171C]">{a.name}</span>
+                      {canRemove(a.name) && (
+                        <button onClick={() => removeAttendee(a.name)} className="text-[#6B7280] hover:text-[#E8362E]">
+                          <X size={13} />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -352,8 +340,10 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
             ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {roleList.map((role) => {
-                const taken = stream.roles[role];
-                const isClaiming = claimingRole === role;
+                const fills = getRoleFills(stream, role);
+                const slots = getRoleSlots(stream, role);
+                const full = fills.length >= slots;
+                const alreadyIn = studentIdentity && fills.some((p) => p.name === studentIdentity.name);
                 return (
                   <div
                     key={role}
@@ -361,53 +351,27 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
                     style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}
                   >
                     <span className="text-[10px] uppercase tracking-wide text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                      {role}
+                      {role} {slots > 1 && <span className="text-[#6B7280]">({fills.length}/{slots})</span>}
                     </span>
                     {ROLE_NOTES[role] && (
                       <span className="text-[10px] text-[#6B7280] -mt-1">{ROLE_NOTES[role]}</span>
                     )}
-                    {taken && !isClaiming ? (
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-sm text-[#14171C] truncate">{taken.name}</span>
-                        <button onClick={() => onRelease(stream.id, role)} className="text-[#14171C] hover:text-[#E8362E] shrink-0">
-                          <X size={13} />
-                        </button>
-                      </div>
-                    ) : isClaiming ? (
-                      <div className="flex flex-col gap-1">
-                        <input
-                          autoFocus
-                          list="roster-names"
-                          value={nameInput}
-                          onChange={(e) => {
-                            setNameInput(e.target.value);
-                            const match = rosterEmailFor(e.target.value);
-                            if (match) setEmailInput(match);
-                          }}
-                          placeholder="Your name"
-                          className="w-full bg-transparent border-b text-sm text-[#14171C] placeholder-[#6B7280] outline-none pb-0.5"
-                          style={{ borderColor: "#3E8EDE" }}
-                        />
-                        <div className="flex items-center gap-1">
-                          <input
-                            value={emailInput}
-                            onChange={(e) => setEmailInput(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && submitClaim(role)}
-                            placeholder="Email (for reminders)"
-                            className="w-full bg-transparent border-b text-[11px] text-[#14171C] placeholder-[#6B7280] outline-none pb-0.5"
-                            style={{ borderColor: "#E2E5EA" }}
-                          />
-                          <button onClick={() => submitClaim(role)} className="text-[#3EC28F] shrink-0">
-                            <CheckCircle2 size={16} />
+                    {fills.map((p) => (
+                      <div key={p.name} className="flex items-center justify-between gap-1">
+                        <span className="text-sm text-[#14171C] truncate">{p.name}</span>
+                        {canRemove(p.name) && (
+                          <button onClick={() => onRelease(stream.id, role, p.name)} className="text-[#14171C] hover:text-[#E8362E] shrink-0">
+                            <X size={13} />
                           </button>
-                        </div>
+                        )}
                       </div>
-                    ) : (
+                    ))}
+                    {!full && !alreadyIn && (
                       <button
-                        onClick={() => { setClaimingRole(role); setNameInput(""); setEmailInput(""); }}
+                        onClick={() => claimRoleSlot(role)}
                         className="text-sm text-[#1D6FBD] hover:text-[#125A99] text-left flex items-center gap-1"
                       >
-                        <Circle size={12} /> Open — claim
+                        <Circle size={12} /> {studentIdentity ? "Open — claim" : "Sign in to claim"}
                       </button>
                     )}
                   </div>
@@ -447,13 +411,9 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
               )}
 
               <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
-                <input
-                  value={evaluator}
-                  onChange={(e) => setEvaluator(e.target.value)}
-                  placeholder="Your name"
-                  className="w-full bg-transparent border-b text-sm text-[#14171C] placeholder-[#6B7280] outline-none pb-1"
-                  style={{ borderColor: "#E2E5EA" }}
-                />
+                <p className="text-xs text-[#14171C]">
+                  {studentIdentity ? `Evaluating as ${studentIdentity.name}` : "Sign in to leave an evaluation."}
+                </p>
                 {["video", "audio", "commentary", "overall"].map((cat) => (
                   <div key={cat} className="flex items-center justify-between">
                     <span className="text-xs uppercase tracking-wide text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -481,7 +441,7 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
                   className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
                   style={{ backgroundColor: "#3EC28F22", color: "#178A5E", fontFamily: "'IBM Plex Mono', monospace" }}
                 >
-                  Submit Evaluation
+                  {studentIdentity ? "Submit Evaluation" : "Sign In to Evaluate"}
                 </button>
               </div>
             </div>
@@ -492,18 +452,18 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
   );
 }
 
-function JobCard({ job, onMove, onDelete, onLinkChange, onAssign, onUnassign }) {
+function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, studentIdentity, accessLevel, onRequireSignIn }) {
   const stageIdx = STAGES.findIndex((s) => s.key === job.stage);
   const Icon = TYPE_ICON[job.type] || FileVideo;
   const showLoad = job.stage === "review" || job.stage === "published";
-  const [claiming, setClaiming] = useState(false);
-  const [nameInput, setNameInput] = useState("");
+  const assignees = Array.isArray(job.assignees) ? job.assignees : (job.assignee ? [{ name: job.assignee }] : []);
+  const alreadyOn = studentIdentity && assignees.some((a) => a.name === studentIdentity.name);
+  const canKick = (name) => accessLevel === "admin" || (studentIdentity && studentIdentity.name === name);
 
-  const submitClaim = () => {
-    if (!nameInput.trim()) return;
-    onAssign(job.id, nameInput.trim());
-    setClaiming(false);
-    setNameInput("");
+  const pickUp = () => {
+    if (!studentIdentity) { onRequireSignIn(); return; }
+    if (alreadyOn) return;
+    onPickUp(job.id, studentIdentity.name);
   };
 
   return (
@@ -511,45 +471,41 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onAssign, onUnassign }) 
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 min-w-0">
           <Icon size={14} className="mt-0.5 shrink-0 text-[#14171C]" />
-          <span className="text-sm font-medium text-[#14171C] leading-tight">{job.title}</span>
+          <div className="min-w-0">
+            <span className="text-sm font-medium text-[#14171C] leading-tight block">{job.title}</span>
+            {job.createdBy && (
+              <span className="text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                posted by {job.createdBy}
+              </span>
+            )}
+          </div>
         </div>
         <button onClick={() => onDelete(job.id)} className="text-[#14171C] hover:text-[#E8362E] shrink-0">
           <Trash2 size={13} />
         </button>
       </div>
-      <div className="flex items-center gap-2 text-[11px] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-        {job.assignee && !claiming ? (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#EEF1F4] border border-[#E2E5EA]">
-            {job.assignee}
-            <button onClick={() => onUnassign(job.id)} className="text-[#6B7280] hover:text-[#E8362E]">
-              <X size={11} />
-            </button>
+
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+        {assignees.map((a) => (
+          <span key={a.name} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#EEF1F4] border border-[#E2E5EA]">
+            {a.name}
+            {canKick(a.name) && (
+              <button onClick={() => onKick(job.id, a.name)} className="text-[#6B7280] hover:text-[#E8362E]">
+                <X size={11} />
+              </button>
+            )}
           </span>
-        ) : claiming ? (
-          <span className="flex items-center gap-1">
-            <input
-              autoFocus
-              list="roster-names-jobs"
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitClaim()}
-              placeholder="Your name"
-              className="bg-transparent border-b text-[11px] text-[#14171C] placeholder-[#6B7280] outline-none w-24"
-              style={{ borderColor: "#3E8EDE" }}
-            />
-            <button onClick={submitClaim} className="text-[#3EC28F]"><CheckCircle2 size={14} /></button>
-            <button onClick={() => setClaiming(false)} className="text-[#6B7280]"><X size={14} /></button>
-          </span>
-        ) : (
+        ))}
+        {!alreadyOn && (
           <button
-            onClick={() => setClaiming(true)}
+            onClick={pickUp}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded border"
             style={{ borderColor: "#1D6FBD", color: "#1D6FBD" }}
           >
-            <Circle size={10} /> Pick up this job
+            <Circle size={10} /> {studentIdentity ? "Pick up this job" : "Sign in to pick up"}
           </button>
         )}
-        <span>Due {job.due}</span>
+        <span className="ml-auto">Due {job.due}</span>
       </div>
 
       {showLoad && (
@@ -591,15 +547,17 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onAssign, onUnassign }) 
   );
 }
 
-function AddJobModal({ onClose, onAdd }) {
+function AddJobModal({ onClose, onAdd, studentIdentity }) {
   const [title, setTitle] = useState("");
   const [type, setType] = useState("Video");
-  const [assignee, setAssignee] = useState("");
   const [due, setDue] = useState("");
 
   const submit = () => {
-    if (!title.trim()) return;
-    onAdd({ id: "j" + Date.now(), title: title.trim(), type, stage: "requested", assignee: assignee.trim(), due: due || "TBD", link: "" });
+    if (!title.trim() || !studentIdentity) return;
+    onAdd({
+      id: "j" + Date.now(), title: title.trim(), type, stage: "requested",
+      assignees: [], due: due || "TBD", link: "", createdBy: studentIdentity.name,
+    });
     onClose();
   };
 
@@ -612,6 +570,9 @@ function AddJobModal({ onClose, onAdd }) {
           </h3>
           <button onClick={onClose} className="text-[#14171C] hover:text-[#14171C]"><X size={16} /></button>
         </div>
+        <p className="text-xs text-[#6B7280]">
+          {studentIdentity ? `Posting as ${studentIdentity.name}` : "You need to be signed in to post a job."}
+        </p>
         <input
           value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Job title"
           className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
@@ -625,18 +586,14 @@ function AddJobModal({ onClose, onAdd }) {
           {Object.keys(TYPE_ICON).map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         <input
-          value={assignee} onChange={(e) => setAssignee(e.target.value)} placeholder="Assignee (optional — leave blank for anyone to pick up)"
-          className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
-          style={{ borderColor: "#E2E5EA" }}
-        />
-        <input
           value={due} onChange={(e) => setDue(e.target.value)} placeholder="Due date (e.g. Aug 20)"
           className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
           style={{ borderColor: "#E2E5EA" }}
         />
         <button
           onClick={submit}
-          className="w-full text-xs uppercase tracking-wide font-medium py-2 rounded"
+          disabled={!studentIdentity}
+          className="w-full text-xs uppercase tracking-wide font-medium py-2 rounded disabled:opacity-40"
           style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
         >
           Add to Requested
@@ -792,16 +749,21 @@ function CalendarView({ streams, onSelectStream }) {
   );
 }
 
-function LinksView({ links, onAdd, onDelete }) {
+function LinksView({ links, onAdd, onDelete, studentIdentity, onRequireSignIn }) {
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
 
+  const openForm = () => {
+    if (!studentIdentity) { onRequireSignIn(); return; }
+    setShowForm((v) => !v);
+  };
+
   const submit = () => {
-    if (!title.trim() || !url.trim()) return;
+    if (!title.trim() || !url.trim() || !studentIdentity) return;
     const fullUrl = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
-    onAdd({ id: "l" + Date.now(), title: title.trim(), url: fullUrl, note: note.trim() });
+    onAdd({ id: "l" + Date.now(), title: title.trim(), url: fullUrl, note: note.trim(), createdBy: studentIdentity.name });
     setTitle(""); setUrl(""); setNote(""); setShowForm(false);
   };
 
@@ -812,7 +774,7 @@ function LinksView({ links, onAdd, onDelete }) {
           Important Links
         </h2>
         <button
-          onClick={() => setShowForm((v) => !v)}
+          onClick={openForm}
           className="flex items-center gap-1.5 text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
           style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
         >
@@ -822,6 +784,7 @@ function LinksView({ links, onAdd, onDelete }) {
 
       {showForm && (
         <div className="rounded-md border px-3 py-3 space-y-2 mb-4" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+          <p className="text-xs text-[#6B7280]">Posting as {studentIdentity && studentIdentity.name}</p>
           <input
             value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Link title"
             className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
@@ -859,6 +822,11 @@ function LinksView({ links, onAdd, onDelete }) {
               <div className="min-w-0">
                 <div className="text-sm font-medium text-[#14171C] group-hover:text-[#1D6FBD] truncate">{l.title}</div>
                 {l.note && <div className="text-xs text-[#6B7280] truncate">{l.note}</div>}
+                {l.createdBy && (
+                  <div className="text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                    added by {l.createdBy}
+                  </div>
+                )}
               </div>
             </a>
             <button onClick={() => onDelete(l.id)} className="text-[#6B7280] hover:text-[#C42B22] shrink-0">
@@ -879,7 +847,9 @@ function LinksView({ links, onAdd, onDelete }) {
 function emptyEventForm() {
   return {
     category: "sport", sportKey: "", customTitle: "", opponent: "", site: "Home",
-    date: "", time: "", kind: "broadcast", openRoles: [...ROLES], includeInBoard: true,
+    date: "", time: "", kind: "broadcast", openRoles: [...ROLES],
+    roleSlots: Object.fromEntries(ALL_ROLES.map((r) => [r, 1])),
+    includeInBoard: true, status: "upcoming",
   };
 }
 
@@ -913,13 +883,15 @@ function AdminPanel({
 
   const addStudent = () => {
     if (!studentName.trim() || !studentEmail.trim()) return;
-    onAddRosterEntry({ id: "st" + Date.now(), name: studentName.trim(), email: studentEmail.trim() });
+    onAddRosterEntry({ id: "st" + Date.now(), name: studentName.trim(), email: studentEmail.trim(), pin: genPin() });
     setStudentName("");
     setStudentEmail("");
   };
 
+  const regeneratePin = (r) => onAddRosterEntry({ ...r, pin: genPin() });
+
   const downloadRosterTemplate = () => {
-    const csv = ["name,email", "Mia Fields,mia.fields@example.com", "Josh Turner,josh.turner@example.com"].join("\n");
+    const csv = ["name,email,pin", "Mia Fields,mia.fields@example.com,1234", "Josh Turner,josh.turner@example.com,"].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -943,8 +915,9 @@ function AdminPanel({
         results.data.forEach((row) => {
           const name = (row.name || "").trim();
           const email = (row.email || "").trim();
+          const pin = (row.pin || "").trim() || genPin();
           if (!name || !email) { skipped++; return; }
-          entries.push({ id: "st" + Date.now() + Math.random().toString(36).slice(2, 7), name, email });
+          entries.push({ id: "st" + Date.now() + Math.random().toString(36).slice(2, 7), name, email, pin });
           added++;
         });
         onAddRosterEntries(entries);
@@ -1068,9 +1041,15 @@ function AdminPanel({
       openRoles: Array.isArray(s.openRoles)
         ? s.openRoles
         : (s.needsVideoBoard ? ALL_ROLES : ROLES),
+      roleSlots: s.roleSlots || Object.fromEntries(ALL_ROLES.map((r) => [r, 1])),
       includeInBoard: s.includeInBoard !== false,
+      status: s.status || "upcoming",
     });
     if (modalScrollRef.current) modalScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const setRoleSlotCount = (role, n) => {
+    setForm((f) => ({ ...f, roleSlots: { ...f.roleSlots, [role]: Math.max(1, n) } }));
   };
 
   const toggleFormRole = (role) => {
@@ -1110,8 +1089,10 @@ function AdminPanel({
           time: form.time.trim() || "TBA",
           openSignup: form.kind === "content",
           openRoles: form.openRoles,
+          roleSlots: form.roleSlots,
           needsVideoBoard: form.openRoles.includes(VIDEO_BOARD_ROLE),
           includeInBoard: form.includeInBoard,
+          status: form.status,
         }
       : {
           sportKey: form.sportKey.trim(),
@@ -1122,8 +1103,10 @@ function AdminPanel({
           time: form.time.trim() || "TBA",
           openSignup: form.kind === "content",
           openRoles: form.openRoles,
+          roleSlots: form.roleSlots,
           needsVideoBoard: form.openRoles.includes(VIDEO_BOARD_ROLE),
           includeInBoard: form.includeInBoard,
+          status: form.status,
         };
     if (editingId) {
       onUpdate(editingId, payload);
@@ -1131,7 +1114,6 @@ function AdminPanel({
       onAdd({
         id: "ev" + Date.now(),
         ...payload,
-        status: "upcoming",
         roles: { ...emptyRoles },
         evaluations: [],
         attendees: [],
@@ -1371,20 +1353,52 @@ function AdminPanel({
                 <p className="text-[10px] text-[#6B7280] mb-1.5">
                   Uncheck everything to keep sign-up available but show zero open positions until you add specific ones — handy for away games you only sometimes cover.
                 </p>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                <div className="grid grid-cols-1 gap-1.5">
                   {ALL_ROLES.map((role) => (
-                    <label key={role} className="flex items-center gap-1.5 text-xs text-[#14171C]">
-                      <input
-                        type="checkbox"
-                        checked={form.openRoles.includes(role)}
-                        onChange={() => toggleFormRole(role)}
-                      />
-                      {role}
-                    </label>
+                    <div key={role} className="flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-1.5 text-xs text-[#14171C]">
+                        <input
+                          type="checkbox"
+                          checked={form.openRoles.includes(role)}
+                          onChange={() => toggleFormRole(role)}
+                        />
+                        {role}
+                      </label>
+                      {form.openRoles.includes(role) && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>slots</span>
+                          <button type="button" onClick={() => setRoleSlotCount(role, (form.roleSlots[role] || 1) - 1)} className="text-[#6B7280] hover:text-[#14171C] px-1">–</button>
+                          <span className="text-xs text-[#14171C] w-4 text-center">{form.roleSlots[role] || 1}</span>
+                          <button type="button" onClick={() => setRoleSlotCount(role, (form.roleSlots[role] || 1) + 1)} className="text-[#6B7280] hover:text-[#14171C] px-1">+</button>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
             )}
+
+            <div className="rounded border px-2.5 py-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
+              <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Status</span>
+              <div className="flex gap-1.5 mt-1.5">
+                {[{ key: "upcoming", label: "Upcoming" }, { key: "live", label: "Live" }, { key: "complete", label: "Completed" }].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, status: opt.key }))}
+                    className="flex-1 text-[10px] uppercase tracking-wide px-2 py-1.5 rounded border"
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      color: form.status === opt.key ? "#FFFFFF" : "#14171C",
+                      backgroundColor: form.status === opt.key ? "#14171C" : "#FFFFFF",
+                      borderColor: form.status === opt.key ? "#14171C" : "#E2E5EA",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="flex items-center gap-2 pt-1">
               <button
@@ -1496,14 +1510,27 @@ function AdminPanel({
             )}
 
             {roster.length > 0 && (
-              <div className="space-y-1.5 pt-1 max-h-40 overflow-y-auto">
+              <div className="space-y-1.5 pt-1 max-h-56 overflow-y-auto">
                 {roster.map((r) => (
                   <div key={r.id} className="flex items-center justify-between gap-2 rounded border px-3 py-1.5" style={{ borderColor: "#E2E5EA" }}>
                     <div className="min-w-0">
-                      <span className="text-sm text-[#14171C]">{r.name}</span>
-                      <span className="text-[11px] text-[#6B7280] ml-2">{r.email}</span>
+                      <div className="text-sm text-[#14171C]">{r.name}</div>
+                      <div className="text-[11px] text-[#6B7280]">{r.email}</div>
                     </div>
-                    <button onClick={() => onDeleteRosterEntry(r.id)} className="text-[#6B7280] hover:text-[#C42B22] shrink-0"><Trash2 size={13} /></button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span
+                        className="text-xs px-2 py-1 rounded"
+                        style={{ backgroundColor: "#EEF1F4", color: "#14171C", fontFamily: "'IBM Plex Mono', monospace" }}
+                        title="Sign-in PIN"
+                      >
+                        {r.pin || "----"}
+                      </span>
+                      <button onClick={() => regeneratePin(r)} title="Generate a new PIN" className="text-[#6B7280] hover:text-[#1D6FBD]"><KeyRound size={13} /></button>
+                      <button
+                        onClick={() => { if (window.confirm(`Remove ${r.name} from the roster? They'll no longer be able to sign in with their PIN.`)) onDeleteRosterEntry(r.id); }}
+                        className="text-[#6B7280] hover:text-[#C42B22]"
+                      ><Trash2 size={13} /></button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1659,8 +1686,72 @@ function PasscodeGate({ passcodes, onUnlock }) {
   );
 }
 
+function StudentSignInModal({ roster, onSignIn, onClose }) {
+  const [name, setName] = useState("");
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState(false);
+
+  const submit = () => {
+    const match = roster.find(
+      (r) => r.name.trim().toLowerCase() === name.trim().toLowerCase() && r.pin && r.pin === pin.trim()
+    );
+    if (!match) { setError(true); return; }
+    onSignIn(match);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-md border p-5 space-y-3"
+        style={{ backgroundColor: "#FFFFFF", borderColor: "#E2E5EA" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm uppercase tracking-wide font-semibold text-[#14171C]" style={{ fontFamily: "'Oswald', sans-serif" }}>
+            Sign In
+          </h3>
+          <button onClick={onClose} className="text-[#6B7280] hover:text-[#14171C]"><X size={16} /></button>
+        </div>
+        <p className="text-xs text-[#6B7280]">
+          Sign in with your name and PIN to sign up for positions, post jobs, add links, or leave an evaluation. Ask your producer if you don't have a PIN yet.
+        </p>
+        <input
+          list="roster-names-signin"
+          value={name}
+          onChange={(e) => { setName(e.target.value); setError(false); }}
+          placeholder="Your name"
+          className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
+          style={{ borderColor: "#E2E5EA" }}
+        />
+        <datalist id="roster-names-signin">
+          {roster.map((r) => <option key={r.id} value={r.name} />)}
+        </datalist>
+        <input
+          value={pin}
+          onChange={(e) => { setPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setError(false); }}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="4-digit PIN"
+          inputMode="numeric"
+          className="w-full bg-[#EEF1F4] border rounded px-3 py-2.5 text-sm text-[#14171C] placeholder-[#6B7280] outline-none text-center tracking-[0.4em]"
+          style={{ borderColor: error ? "#E8362E" : "#E2E5EA" }}
+        />
+        {error && <p className="text-xs text-[#C42B22]">That name/PIN combo didn't match. Check with your producer.</p>}
+        <button
+          onClick={submit}
+          className="w-full text-xs uppercase tracking-wide font-medium py-2.5 rounded"
+          style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+        >
+          Sign In
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [accessLevel, setAccessLevel] = useState(null); // null | 'student' | 'admin'
+  const [studentIdentity, setStudentIdentity] = useState(null); // null | {id, name, email}
+  const [showSignIn, setShowSignIn] = useState(false);
   const [passcodes, setPasscodesLocal] = useState({ student: "TIGERS2026", admin: "KRAZOADMIN" });
   const [reminderHours, setReminderHoursLocal] = useState(24);
   const [tab, setTab] = useState("live");
@@ -1669,13 +1760,17 @@ export default function App() {
   const [links, setLinks] = useState([]);
   const [roster, setRoster] = useState([]);
   const [dataReady, setDataReady] = useState(false);
-  const [expandedId, setExpandedId] = useState("fb1");
+  const [expandedId, setExpandedId] = useState(null);
   const [showAddJob, setShowAddJob] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [clock, setClock] = useState(new Date());
   const [sortBy, setSortBy] = useState("date"); // 'date' | 'sport'
   const [sportFilter, setSportFilter] = useState("All");
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [jobSortBy, setJobSortBy] = useState("due"); // 'due' | 'title'
   const [calendarStreamId, setCalendarStreamId] = useState(null);
+
+  const requireSignIn = () => setShowSignIn(true);
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
@@ -1736,13 +1831,16 @@ export default function App() {
   }
 
   const boardStreams = streams.filter((s) => s.includeInBoard);
+  const activeBoardStreams = boardStreams.filter((s) => s.status !== "complete");
+  const completedBoardStreams = boardStreams.filter((s) => s.status === "complete");
+  const visibleStreams = showCompleted ? completedBoardStreams : activeBoardStreams;
 
-  const presentSports = Array.from(new Set(boardStreams.map((s) => s.sportKey))).sort(
+  const presentSports = Array.from(new Set(visibleStreams.map((s) => s.sportKey))).sort(
     (a, b) => sportOrderIndex(a) - sportOrderIndex(b) || a.localeCompare(b)
   );
   const SPORT_FILTERS = ["All", ...presentSports];
 
-  const displayedStreams = boardStreams
+  const displayedStreams = visibleStreams
     .filter((s) => sportFilter === "All" || s.sportKey === sportFilter)
     .slice()
     .sort((a, b) => {
@@ -1753,17 +1851,34 @@ export default function App() {
       return parseStreamDateTime(a) - parseStreamDateTime(b);
     });
 
-  const claimRole = (streamId, role, name, email) =>
-    updateDoc(doc(db, "streams", streamId), { [`roles.${role}`]: { name, email } });
+  const claimRole = (streamId, role, name, email) => {
+    const stream = streams.find((s) => s.id === streamId);
+    if (!stream) return;
+    const current = getRoleFills(stream, role);
+    const slots = getRoleSlots(stream, role);
+    if (current.length >= slots || current.some((p) => p.name === name)) return;
+    updateDoc(doc(db, "streams", streamId), { [`roles.${role}`]: [...current, { name, email }] });
+  };
 
-  const releaseRole = (streamId, role) =>
-    updateDoc(doc(db, "streams", streamId), { [`roles.${role}`]: null });
+  const releaseRole = (streamId, role, name) => {
+    const stream = streams.find((s) => s.id === streamId);
+    if (!stream) return;
+    const current = getRoleFills(stream, role).filter((p) => p.name !== name);
+    updateDoc(doc(db, "streams", streamId), { [`roles.${role}`]: current });
+  };
 
   const submitEval = (streamId, ev) =>
     updateDoc(doc(db, "streams", streamId), { evaluations: arrayUnion(ev) });
 
   const addAttendee = (streamId, attendee) =>
     updateDoc(doc(db, "streams", streamId), { attendees: arrayUnion(attendee) });
+
+  const removeAttendee = (streamId, name) => {
+    const stream = streams.find((s) => s.id === streamId);
+    if (!stream) return;
+    const current = (stream.attendees || []).filter((a) => a.name !== name);
+    updateDoc(doc(db, "streams", streamId), { attendees: current });
+  };
 
   const addStream = (stream) => setDoc(doc(db, "streams", stream.id), stream);
   const updateStream = (id, patch) => updateDoc(doc(db, "streams", id), patch);
@@ -1791,8 +1906,21 @@ export default function App() {
   const deleteJob = (id) => deleteDoc(doc(db, "jobs", id));
   const linkChange = (id, link) => updateDoc(doc(db, "jobs", id), { link });
   const addJob = (job) => setDoc(doc(db, "jobs", job.id), job);
-  const assignJob = (id, name) => updateDoc(doc(db, "jobs", id), { assignee: name });
-  const unassignJob = (id) => updateDoc(doc(db, "jobs", id), { assignee: "" });
+
+  const pickUpJob = (id, name) => {
+    const job = jobs.find((j) => j.id === id);
+    if (!job) return;
+    const current = Array.isArray(job.assignees) ? job.assignees : (job.assignee ? [{ name: job.assignee }] : []);
+    if (current.some((a) => a.name === name)) return;
+    updateDoc(doc(db, "jobs", id), { assignees: [...current, { name }], assignee: "" });
+  };
+
+  const kickFromJob = (id, name) => {
+    const job = jobs.find((j) => j.id === id);
+    if (!job) return;
+    const current = Array.isArray(job.assignees) ? job.assignees : (job.assignee ? [{ name: job.assignee }] : []);
+    updateDoc(doc(db, "jobs", id), { assignees: current.filter((a) => a.name !== name), assignee: "" });
+  };
 
   const setPasscodes = (newPasscodes) => setDoc(doc(db, "settings", "app"), { passcodes: newPasscodes }, { merge: true });
   const setReminderHours = (n) => setDoc(doc(db, "settings", "app"), { reminderHours: n }, { merge: true });
@@ -1825,6 +1953,24 @@ export default function App() {
               {liveCount > 0 && <TallyDot color="#C42B22" pulse label={`${liveCount} ON AIR`} />}
               <span className="ml-2">{clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
             </div>
+            {studentIdentity ? (
+              <button
+                onClick={() => setStudentIdentity(null)}
+                title="Sign out"
+                className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-medium px-2.5 py-1.5 rounded border"
+                style={{ borderColor: "#178A5E", color: "#178A5E", fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                <CheckCircle2 size={13} /> <span className="hidden sm:inline">{studentIdentity.name}</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowSignIn(true)}
+                className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-medium px-2.5 py-1.5 rounded border"
+                style={{ borderColor: "#1D6FBD", color: "#1D6FBD", fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                <KeyRound size={13} /> <span className="hidden sm:inline">Sign In</span>
+              </button>
+            )}
             {accessLevel === "admin" && (
               <button
                 onClick={() => setShowAdmin(true)}
@@ -1835,7 +1981,7 @@ export default function App() {
               </button>
             )}
             <button
-              onClick={() => setAccessLevel(null)}
+              onClick={() => { setAccessLevel(null); setStudentIdentity(null); }}
               title="Lock / switch access code"
               className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-medium px-2.5 py-1.5 rounded border"
               style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
@@ -1873,9 +2019,23 @@ export default function App() {
         {tab === "live" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between mb-1 flex-wrap gap-y-2">
-              <h2 className="text-[11px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                Rundown
-              </h2>
+              <div className="flex items-center gap-1.5">
+                {[{ key: false, label: `Active (${activeBoardStreams.length})` }, { key: true, label: `Completed (${completedBoardStreams.length})` }].map((opt) => (
+                  <button
+                    key={String(opt.key)}
+                    onClick={() => setShowCompleted(opt.key)}
+                    className="text-[10px] uppercase tracking-wide px-2.5 py-1.5 rounded border"
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      color: showCompleted === opt.key ? "#FFFFFF" : "#14171C",
+                      backgroundColor: showCompleted === opt.key ? "#14171C" : "#F6F7F9",
+                      borderColor: showCompleted === opt.key ? "#14171C" : "#E2E5EA",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] uppercase tracking-wide text-[#6B7280] mr-0.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -1911,7 +2071,7 @@ export default function App() {
             </div>
             {displayedStreams.length === 0 && (
               <div className="rounded border border-dashed px-3 py-6 text-center text-xs text-[#6B7280]" style={{ borderColor: "#E2E5EA" }}>
-                No games match this filter.
+                {showCompleted ? "No completed events yet." : "No games match this filter."}
               </div>
             )}
             {displayedStreams.map((s) => (
@@ -1924,7 +2084,11 @@ export default function App() {
                 onRelease={releaseRole}
                 onSubmitEval={submitEval}
                 onAddAttendee={addAttendee}
+                onRemoveAttendee={removeAttendee}
                 roster={roster}
+                studentIdentity={studentIdentity}
+                accessLevel={accessLevel}
+                onRequireSignIn={requireSignIn}
               />
             ))}
           </div>
@@ -1936,24 +2100,46 @@ export default function App() {
 
         {tab === "content" && (
           <div>
-            <datalist id="roster-names-jobs">
-              {roster.map((r) => <option key={r.id} value={r.name} />)}
-            </datalist>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-y-2">
               <h2 className="text-[11px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                 Production Pipeline
               </h2>
-              <button
-                onClick={() => setShowAddJob(true)}
-                className="flex items-center gap-1.5 text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
-                style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
-              >
-                <PlusCircle size={13} /> Post Job
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] uppercase tracking-wide text-[#6B7280] mr-0.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                    Sort
+                  </span>
+                  {[{ key: "due", label: "Due Date" }, { key: "title", label: "Title" }].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setJobSortBy(opt.key)}
+                      className="text-[10px] uppercase tracking-wide px-2 py-1 rounded border"
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        color: jobSortBy === opt.key ? "#FFFFFF" : "#14171C",
+                        backgroundColor: jobSortBy === opt.key ? "#14171C" : "#F6F7F9",
+                        borderColor: jobSortBy === opt.key ? "#14171C" : "#E2E5EA",
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => (studentIdentity ? setShowAddJob(true) : requireSignIn())}
+                  className="flex items-center gap-1.5 text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
+                  style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+                >
+                  <PlusCircle size={13} /> Post Job
+                </button>
+              </div>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
               {STAGES.map((stage) => {
-                const stageJobs = jobs.filter((j) => j.stage === stage.key);
+                const stageJobs = jobs
+                  .filter((j) => j.stage === stage.key)
+                  .slice()
+                  .sort((a, b) => (jobSortBy === "title" ? a.title.localeCompare(b.title) : (a.due || "").localeCompare(b.due || "")));
                 return (
                   <div key={stage.key} className="flex-shrink-0 w-64">
                     <div className="flex items-center gap-1.5 mb-2 px-0.5">
@@ -1971,8 +2157,11 @@ export default function App() {
                           onMove={moveJob}
                           onDelete={deleteJob}
                           onLinkChange={linkChange}
-                          onAssign={assignJob}
-                          onUnassign={unassignJob}
+                          onPickUp={pickUpJob}
+                          onKick={kickFromJob}
+                          studentIdentity={studentIdentity}
+                          accessLevel={accessLevel}
+                          onRequireSignIn={requireSignIn}
                         />
                       ))}
                       {stageJobs.length === 0 && (
@@ -1989,7 +2178,7 @@ export default function App() {
         )}
 
         {tab === "links" && (
-          <LinksView links={links} onAdd={addLink} onDelete={deleteLink} />
+          <LinksView links={links} onAdd={addLink} onDelete={deleteLink} studentIdentity={studentIdentity} onRequireSignIn={requireSignIn} />
         )}
       </div>
 
@@ -2017,14 +2206,24 @@ export default function App() {
                 onRelease={releaseRole}
                 onSubmitEval={submitEval}
                 onAddAttendee={addAttendee}
+                onRemoveAttendee={removeAttendee}
                 roster={roster}
+                studentIdentity={studentIdentity}
+                accessLevel={accessLevel}
+                onRequireSignIn={requireSignIn}
               />
             </div>
           </div>
         );
       })()}
 
-      {showAddJob && <AddJobModal onClose={() => setShowAddJob(false)} onAdd={addJob} />}
+      {showAddJob && (
+        <AddJobModal
+          onClose={() => setShowAddJob(false)}
+          onAdd={addJob}
+          studentIdentity={studentIdentity}
+        />
+      )}
 
       {/* Mobile bottom nav — hidden on desktop, fixed on small screens */}
       <div
@@ -2066,6 +2265,14 @@ export default function App() {
           onDeleteRosterEntry={deleteRosterEntry}
           reminderHours={reminderHours}
           onUpdateReminderHours={setReminderHours}
+        />
+      )}
+
+      {showSignIn && (
+        <StudentSignInModal
+          roster={roster}
+          onClose={() => setShowSignIn(false)}
+          onSignIn={(match) => { setStudentIdentity({ id: match.id, name: match.name, email: match.email }); setShowSignIn(false); }}
         />
       )}
     </div>
