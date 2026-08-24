@@ -250,8 +250,9 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
   };
 
   const submitEvaluation = () => {
-    if (!studentIdentity) { onRequireSignIn(); return; }
-    onSubmitEval(stream.id, { evaluator: studentIdentity.name, ...rating, notes });
+    if (accessLevel !== "admin") return;
+    const evaluatorName = studentIdentity ? studentIdentity.name : "Producer";
+    onSubmitEval(stream.id, { evaluator: evaluatorName, ...rating, notes });
     setNotes("");
     setRating({ video: 0, audio: 0, commentary: 0, overall: 0 });
   };
@@ -416,9 +417,10 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
                 </div>
               )}
 
+              {accessLevel === "admin" && (
               <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
                 <p className="text-xs text-[#14171C]">
-                  {studentIdentity ? `Evaluating as ${studentIdentity.name}` : "Sign in to leave an evaluation."}
+                  Evaluating as {studentIdentity ? studentIdentity.name : "Producer"}
                 </p>
                 {["video", "audio", "commentary", "overall"].map((cat) => (
                   <div key={cat} className="flex items-center justify-between">
@@ -447,9 +449,10 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
                   className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
                   style={{ backgroundColor: "#3EC28F22", color: "#178A5E", fontFamily: "'IBM Plex Mono', monospace" }}
                 >
-                  {studentIdentity ? "Submit Evaluation" : "Sign In to Evaluate"}
+                  Submit Evaluation
                 </button>
               </div>
+              )}
             </div>
           )}
         </div>
@@ -862,7 +865,7 @@ function emptyEventForm() {
 function AdminPanel({
   streams, onAdd, onUpdate, onDelete, onClose, passcodes, onUpdatePasscodes,
   roster, onAddRosterEntry, onAddRosterEntries, onDeleteRosterEntry,
-  reminderHours, onUpdateReminderHours,
+  reminderHours, onUpdateReminderHours, adminName, onUpdateAdminName,
 }) {
   const [adminTab, setAdminTab] = useState("schedule");
   const [editingId, setEditingId] = useState(null);
@@ -871,6 +874,8 @@ function AdminPanel({
   const [studentCode, setStudentCode] = useState(passcodes.student);
   const [adminCode, setAdminCode] = useState(passcodes.admin);
   const [codesSaved, setCodesSaved] = useState(false);
+  const [adminNameInput, setAdminNameInput] = useState(adminName);
+  const [adminNameSaved, setAdminNameSaved] = useState(false);
   const [studentName, setStudentName] = useState("");
   const [studentEmail, setStudentEmail] = useState("");
   const [rosterUploadSummary, setRosterUploadSummary] = useState(null);
@@ -879,6 +884,13 @@ function AdminPanel({
   const fileInputRef = useRef(null);
   const rosterFileInputRef = useRef(null);
   const modalScrollRef = useRef(null);
+
+  const saveAdminName = () => {
+    if (!adminNameInput.trim()) return;
+    onUpdateAdminName(adminNameInput.trim());
+    setAdminNameSaved(true);
+    setTimeout(() => setAdminNameSaved(false), 2000);
+  };
 
   const saveCodes = () => {
     if (!studentCode.trim() || !adminCode.trim()) return;
@@ -1601,6 +1613,29 @@ function AdminPanel({
 
           {adminTab === "security" && (
           <>
+          {/* Admin identity */}
+          <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280] flex items-center gap-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+              <CheckCircle2 size={12} /> Your Name
+            </div>
+            <p className="text-[11px] text-[#6B7280]">
+              Whatever's here is what shows up when you sign up for a position, post a job, add a link, or submit an evaluation — you never need a PIN, the admin code alone is enough to act under this name.
+            </p>
+            <input
+              value={adminNameInput}
+              onChange={(e) => setAdminNameInput(e.target.value)}
+              className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none"
+              style={{ borderColor: "#E2E5EA" }}
+            />
+            <button
+              onClick={saveAdminName}
+              className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
+              style={{ backgroundColor: "#178A5E22", color: "#178A5E", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              {adminNameSaved ? "Saved ✓" : "Save Name"}
+            </button>
+          </div>
+
           {/* Security */}
           <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
             <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280] flex items-center gap-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -1759,6 +1794,7 @@ export default function App() {
   const [studentIdentity, setStudentIdentity] = useState(null); // null | {id, name, email}
   const [showSignIn, setShowSignIn] = useState(false);
   const [passcodes, setPasscodesLocal] = useState({ student: "TIGERS2026", admin: "KRAZOADMIN" });
+  const [adminName, setAdminNameLocal] = useState("Producer");
   const [reminderHours, setReminderHoursLocal] = useState(24);
   const [tab, setTab] = useState("live");
   const [streams, setStreams] = useState([]);
@@ -1800,6 +1836,7 @@ export default function App() {
         await setDoc(doc(db, "settings", "app"), {
           passcodes: { student: "TIGERS2026", admin: "KRAZOADMIN" },
           reminderHours: 24,
+          adminName: "Producer",
         });
       }
       setDataReady(true);
@@ -1819,6 +1856,7 @@ export default function App() {
         const data = d.data();
         if (data.passcodes) setPasscodesLocal(data.passcodes);
         if (typeof data.reminderHours === "number") setReminderHoursLocal(data.reminderHours);
+        if (data.adminName) setAdminNameLocal(data.adminName);
       }),
     ];
     return () => unsubs.forEach((u) => u());
@@ -1943,6 +1981,11 @@ export default function App() {
 
   const setPasscodes = (newPasscodes) => setDoc(doc(db, "settings", "app"), { passcodes: newPasscodes }, { merge: true });
   const setReminderHours = (n) => setDoc(doc(db, "settings", "app"), { reminderHours: n }, { merge: true });
+  const setAdminName = (name) => setDoc(doc(db, "settings", "app"), { adminName: name }, { merge: true });
+
+  // Admins act under their own name without ever needing a student PIN.
+  // Students still go through the sign-in modal (name + PIN) as before.
+  const effectiveIdentity = studentIdentity || (accessLevel === "admin" ? { id: "admin", name: adminName, email: "" } : null);
 
   const liveCount = streams.filter((s) => s.status === "live").length;
 
@@ -1972,7 +2015,15 @@ export default function App() {
               {liveCount > 0 && <TallyDot color="#C42B22" pulse label={`${liveCount} ON AIR`} />}
               <span className="ml-2">{clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
             </div>
-            {studentIdentity ? (
+            {accessLevel === "admin" ? (
+              <span
+                className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-medium px-2.5 py-1.5 rounded border"
+                style={{ borderColor: "#178A5E", color: "#178A5E", fontFamily: "'IBM Plex Mono', monospace" }}
+                title="Admins act under this name without needing a PIN — set it in Admin → Security"
+              >
+                <CheckCircle2 size={13} /> <span className="hidden sm:inline">{adminName}</span>
+              </span>
+            ) : studentIdentity ? (
               <button
                 onClick={() => setStudentIdentity(null)}
                 title="Sign out"
@@ -2105,7 +2156,7 @@ export default function App() {
                 onAddAttendee={addAttendee}
                 onRemoveAttendee={removeAttendee}
                 roster={roster}
-                studentIdentity={studentIdentity}
+                studentIdentity={effectiveIdentity}
                 accessLevel={accessLevel}
                 onRequireSignIn={requireSignIn}
               />
@@ -2145,7 +2196,7 @@ export default function App() {
                   ))}
                 </div>
                 <button
-                  onClick={() => (studentIdentity ? setShowAddJob(true) : requireSignIn())}
+                  onClick={() => (effectiveIdentity ? setShowAddJob(true) : requireSignIn())}
                   className="flex items-center gap-1.5 text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
                   style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
                 >
@@ -2178,7 +2229,7 @@ export default function App() {
                           onLinkChange={linkChange}
                           onPickUp={pickUpJob}
                           onKick={kickFromJob}
-                          studentIdentity={studentIdentity}
+                          studentIdentity={effectiveIdentity}
                           accessLevel={accessLevel}
                           onRequireSignIn={requireSignIn}
                         />
@@ -2197,7 +2248,7 @@ export default function App() {
         )}
 
         {tab === "links" && (
-          <LinksView links={links} onAdd={addLink} onDelete={deleteLink} studentIdentity={studentIdentity} onRequireSignIn={requireSignIn} />
+          <LinksView links={links} onAdd={addLink} onDelete={deleteLink} studentIdentity={effectiveIdentity} onRequireSignIn={requireSignIn} />
         )}
       </div>
 
@@ -2227,7 +2278,7 @@ export default function App() {
                 onAddAttendee={addAttendee}
                 onRemoveAttendee={removeAttendee}
                 roster={roster}
-                studentIdentity={studentIdentity}
+                studentIdentity={effectiveIdentity}
                 accessLevel={accessLevel}
                 onRequireSignIn={requireSignIn}
               />
@@ -2240,7 +2291,7 @@ export default function App() {
         <AddJobModal
           onClose={() => setShowAddJob(false)}
           onAdd={addJob}
-          studentIdentity={studentIdentity}
+          studentIdentity={effectiveIdentity}
         />
       )}
 
@@ -2284,6 +2335,8 @@ export default function App() {
           onDeleteRosterEntry={deleteRosterEntry}
           reminderHours={reminderHours}
           onUpdateReminderHours={setReminderHours}
+          adminName={adminName}
+          onUpdateAdminName={setAdminName}
         />
       )}
 
