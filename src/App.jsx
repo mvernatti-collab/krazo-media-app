@@ -656,11 +656,8 @@ function CalendarView({ streams, onSelectStream }) {
             {label}
           </span>
         ))}
-        <span className="flex items-center gap-1 text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "#6B7280" }} /> Solid = Home
-        </span>
-        <span className="flex items-center gap-1 text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-          <span className="h-2 w-2 rounded-sm" style={{ border: "1px solid #6B7280" }} /> Outline = Away
+        <span className="text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+          ·H = Home · ·A = Away
         </span>
       </div>
 
@@ -707,18 +704,14 @@ function CalendarView({ streams, onSelectStream }) {
                 </span>
                 {dayEvents.slice(0, 3).map((ev) => {
                   const c = CATEGORY_COLORS[eventCategory(ev)];
-                  const isHome = ev.site === "Home";
+                  const siteLetter = ev.site === "Home" ? "H" : "A";
                   return (
                     <span
                       key={ev.id}
                       className="text-[8px] sm:text-[9px] uppercase tracking-wide px-1 rounded truncate w-full"
-                      style={
-                        isHome
-                          ? { color: "#FFFFFF", backgroundColor: c, fontFamily: "'IBM Plex Mono', monospace" }
-                          : { color: c, backgroundColor: "transparent", border: `1px solid ${c}`, fontFamily: "'IBM Plex Mono', monospace" }
-                      }
+                      style={{ color: "#FFFFFF", backgroundColor: c, fontFamily: "'IBM Plex Mono', monospace" }}
                     >
-                      {sportAbbr(ev.sportKey)}
+                      {sportAbbr(ev.sportKey)}·{siteLetter}
                     </span>
                   );
                 })}
@@ -743,10 +736,16 @@ function CalendarView({ streams, onSelectStream }) {
               className="w-full flex items-center justify-between gap-3 rounded border px-3 py-2 text-left"
               style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFF" }}
             >
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-[#14171C] truncate">{ev.title}</div>
                 <div className="text-xs text-[#6B7280] truncate">{ev.opponent}</div>
               </div>
+              <span
+                className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0"
+                style={{ color: "#FFFFFF", backgroundColor: CATEGORY_COLORS[eventCategory(ev)], fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                {ev.site === "Home" ? "Home" : "Away"} · {CATEGORY_LABELS[eventCategory(ev)]}
+              </span>
               <span className="text-[11px] text-[#6B7280] shrink-0" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                 {ev.time}
               </span>
@@ -868,6 +867,7 @@ function AdminPanel({
   reminderHours, onUpdateReminderHours, adminName, onUpdateAdminName,
 }) {
   const [adminTab, setAdminTab] = useState("schedule");
+  const [scheduleSortBy, setScheduleSortBy] = useState("date"); // 'date' | 'type' | 'sport'
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyEventForm());
   const [uploadSummary, setUploadSummary] = useState(null);
@@ -968,7 +968,21 @@ function AdminPanel({
     return Array.from(emails);
   };
 
-  const sortedStreams = [...streams].sort((a, b) => parseStreamDateTime(a) - parseStreamDateTime(b));
+  const catOrder = { livestream: 0, content: 1, special: 2 };
+  const sortedStreams = [...streams].sort((a, b) => {
+    const aPast = a.status === "complete" || isPastDate(a);
+    const bPast = b.status === "complete" || isPastDate(b);
+    if (aPast !== bPast) return aPast ? 1 : -1; // past/completed always sink to the bottom
+
+    if (scheduleSortBy === "sport") {
+      const diff = sportOrderIndex(a.sportKey) - sportOrderIndex(b.sportKey);
+      if (diff !== 0) return diff;
+    } else if (scheduleSortBy === "type") {
+      const diff = catOrder[eventCategory(a)] - catOrder[eventCategory(b)];
+      if (diff !== 0) return diff;
+    }
+    return parseStreamDateTime(a) - parseStreamDateTime(b);
+  });
 
   const effectiveRoles = (s) =>
     Array.isArray(s.openRoles) ? s.openRoles : (s.needsVideoBoard ? ALL_ROLES : ROLES);
@@ -1440,19 +1454,50 @@ function AdminPanel({
 
           {/* Existing events list */}
           <div>
-            <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280] mb-2 flex items-center gap-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-              <ListChecks size={12} /> All Events ({sortedStreams.length})
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-y-1.5">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280] flex items-center gap-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                <ListChecks size={12} /> All Events ({sortedStreams.length})
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] uppercase tracking-wide text-[#6B7280] mr-0.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Sort</span>
+                {[{ key: "date", label: "Date" }, { key: "type", label: "Type" }, { key: "sport", label: "Sport" }].map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setScheduleSortBy(opt.key)}
+                    className="text-[10px] uppercase tracking-wide px-2 py-1 rounded border"
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      color: scheduleSortBy === opt.key ? "#FFFFFF" : "#14171C",
+                      backgroundColor: scheduleSortBy === opt.key ? "#14171C" : "#FFFFFF",
+                      borderColor: scheduleSortBy === opt.key ? "#14171C" : "#E2E5EA",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
+            <p className="text-[10px] text-[#6B7280] mb-2">Past and completed events always sink to the bottom, regardless of sort.</p>
             <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-              {sortedStreams.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-2 rounded border px-3 py-2" style={{ borderColor: "#E2E5EA" }}>
+              {sortedStreams.map((s) => {
+                const past = s.status === "complete" || isPastDate(s);
+                return (
+                <div key={s.id} className="flex items-center justify-between gap-2 rounded border px-3 py-2" style={{ borderColor: "#E2E5EA", opacity: past ? 0.55 : 1 }}>
                   <div className="min-w-0">
                     <div className="text-sm text-[#14171C] truncate">{s.title} <span className="text-[#6B7280]">{s.opponent}</span></div>
                     <div className="text-[11px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                      {s.date} · {s.time} · {s.site}{s.openSignup ? " · Open Call" : ""}
+                      {s.date} · {s.time} · {s.site}{past ? " · Past" : ""}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => onUpdate(s.id, { openSignup: !s.openSignup })}
+                      title="Click to toggle Livestream / Content Only"
+                      className="text-[9px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded"
+                      style={{ color: "#FFFFFF", backgroundColor: CATEGORY_COLORS[eventCategory(s)], fontFamily: "'IBM Plex Mono', monospace" }}
+                    >
+                      {s.openSignup ? "Content" : "Livestream"}
+                    </button>
                     <span
                       className="text-[9px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded"
                       style={
@@ -1467,7 +1512,8 @@ function AdminPanel({
                     <button onClick={() => onDelete(s.id)} className="text-[#6B7280] hover:text-[#C42B22]"><Trash2 size={14} /></button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
             </>
@@ -1813,6 +1859,13 @@ export default function App() {
   const [calendarStreamId, setCalendarStreamId] = useState(null);
 
   const requireSignIn = () => setShowSignIn(true);
+
+  // Signing in as admin drops you straight into the Admin panel instead of the
+  // student-facing boards. Close it once and it stays closed for the rest of
+  // the session — this only fires on the transition into admin access.
+  useEffect(() => {
+    if (accessLevel === "admin") setShowAdmin(true);
+  }, [accessLevel]);
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
