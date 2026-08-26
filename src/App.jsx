@@ -75,7 +75,12 @@ function parseScheduleText(text, mondayISO) {
     eventDate.setDate(eventDate.getDate() + offset);
     const due = new Date(eventDate);
     due.setDate(due.getDate() - 2); // 48 hours before the event
-    jobs.push({ title: line, due: `${MONTHS[due.getMonth()]} ${due.getDate()}`, type: "Graphic" });
+    jobs.push({
+      title: line,
+      due: `${MONTHS[due.getMonth()]} ${due.getDate()}`,
+      eventDate: `${MONTHS[eventDate.getMonth()]} ${eventDate.getDate()}`,
+      type: "Graphic",
+    });
   });
   return jobs;
 }
@@ -249,7 +254,7 @@ function statusMeta(status) {
   return { color: "#5B6472", text: "#5B6472", label: "Wrapped", pulse: false };
 }
 
-function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEval, onAddAttendee, onRemoveAttendee, roster = [], studentIdentity, accessLevel, onRequireSignIn, onEditEvent }) {
+function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEval, onAddAttendee, onRemoveAttendee, roster = [], studentIdentity, accessLevel, onRequireSignIn, onEditEvent, jobs = [], onJumpToJob }) {
   const meta = statusMeta(stream.status);
   const [rating, setRating] = useState({ video: 0, audio: 0, commentary: 0, overall: 0 });
   const [notes, setNotes] = useState("");
@@ -340,6 +345,33 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
               <Pencil size={12} /> Edit Event Details
             </button>
           )}
+          {(() => {
+            const linkedJobs = jobs.filter((j) => j.linkedStreamId === stream.id);
+            if (linkedJobs.length === 0) return null;
+            return (
+              <div className="rounded border px-3 py-2.5 space-y-1.5" style={{ borderColor: "#1D6FBD", backgroundColor: "#1D6FBD11" }}>
+                <div className="text-[10px] uppercase tracking-[0.15em] text-[#1D6FBD]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                  Content Board Jobs ({linkedJobs.length})
+                </div>
+                {linkedJobs.map((j) => (
+                  <button
+                    key={j.id}
+                    onClick={() => onJumpToJob && onJumpToJob()}
+                    className="w-full flex items-center justify-between gap-2 rounded border px-2.5 py-1.5 text-left"
+                    style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFF" }}
+                  >
+                    <span className="text-xs text-[#14171C] truncate">{j.title}</span>
+                    <span
+                      className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0"
+                      style={{ color: STAGES.find((s) => s.key === j.stage).text, backgroundColor: STAGES.find((s) => s.key === j.stage).color + "22", fontFamily: "'IBM Plex Mono', monospace" }}
+                    >
+                      {STAGES.find((s) => s.key === j.stage).label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           {isOpenCall ? (
             <div>
               <div className="text-[10px] uppercase tracking-[0.15em] text-[#14171C] mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -518,7 +550,7 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
   );
 }
 
-function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEditJob, studentIdentity, accessLevel, onRequireSignIn }) {
+function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEditJob, studentIdentity, accessLevel, onRequireSignIn, streams = [], onJumpToEvent }) {
   const stageIdx = STAGES.findIndex((s) => s.key === job.stage);
   const Icon = TYPE_ICON[job.type] || FileVideo;
   const showLoad = job.stage === "review" || job.stage === "published";
@@ -526,11 +558,15 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
   const alreadyOn = studentIdentity && assignees.some((a) => a.name === studentIdentity.name);
   const canKick = (name) => accessLevel === "admin" || (studentIdentity && studentIdentity.name === name);
   const canEdit = accessLevel === "admin" || (studentIdentity && job.createdBy === studentIdentity.name);
+  const linkedStream = job.linkedStreamId ? streams.find((s) => s.id === job.linkedStreamId) : null;
 
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(job.title);
   const [editType, setEditType] = useState(job.type);
   const [editDue, setEditDue] = useState(job.due);
+  const [editEventDate, setEditEventDate] = useState(job.eventDate || "");
+  const [editLinkedStreamId, setEditLinkedStreamId] = useState(job.linkedStreamId || "");
+  const [editingLink, setEditingLink] = useState(false);
 
   const pickUp = () => {
     if (!studentIdentity) { onRequireSignIn(); return; }
@@ -540,7 +576,10 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
 
   const saveEdit = () => {
     if (!editTitle.trim()) return;
-    onEditJob(job.id, { title: editTitle.trim(), type: editType, due: editDue.trim() || "TBD" });
+    onEditJob(job.id, {
+      title: editTitle.trim(), type: editType, due: editDue.trim() || "TBD",
+      eventDate: editEventDate.trim(), linkedStreamId: editLinkedStreamId,
+    });
     setEditing(false);
   };
 
@@ -560,12 +599,38 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
           >
             {Object.keys(TYPE_ICON).map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <input
-            value={editDue} onChange={(e) => setEditDue(e.target.value)} placeholder="Due date"
-            className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
-            style={{ borderColor: "#E2E5EA" }}
-          />
         </div>
+        <div className="flex gap-2">
+          <label className="flex-1">
+            <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Event Date</span>
+            <input
+              value={editEventDate} onChange={(e) => setEditEventDate(e.target.value)} placeholder="Event date"
+              className="w-full bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+              style={{ borderColor: "#E2E5EA" }}
+            />
+          </label>
+          <label className="flex-1">
+            <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Due Date</span>
+            <input
+              value={editDue} onChange={(e) => setEditDue(e.target.value)} placeholder="Due date"
+              className="w-full bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+              style={{ borderColor: "#E2E5EA" }}
+            />
+          </label>
+        </div>
+        {streams.length > 0 && (
+          <label className="block">
+            <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Link to Calendar Event (optional)</span>
+            <select
+              value={editLinkedStreamId} onChange={(e) => setEditLinkedStreamId(e.target.value)}
+              className="w-full bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+              style={{ borderColor: "#E2E5EA" }}
+            >
+              <option value="">None</option>
+              {streams.map((s) => <option key={s.id} value={s.id}>{s.title} {s.opponent} — {s.date}</option>)}
+            </select>
+          </label>
+        )}
         <div className="flex gap-2">
           <button
             onClick={saveEdit}
@@ -632,19 +697,52 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
             <Circle size={10} /> {studentIdentity ? "Pick up this job" : "Sign in to pick up"}
           </button>
         )}
-        <span className="ml-auto">Due {job.due}</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+        {job.eventDate && <span>Event {job.eventDate}</span>}
+        <span>Due {job.due}</span>
+        {linkedStream && onJumpToEvent && (
+          <button
+            onClick={() => onJumpToEvent(linkedStream.id)}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded"
+            style={{ backgroundColor: "#1D6FBD22", color: "#1D6FBD" }}
+          >
+            <Calendar size={10} /> {linkedStream.title} {linkedStream.opponent}
+          </button>
+        )}
       </div>
 
       {showLoad && (
         <div className="flex items-center gap-1.5 pt-1">
           <Link2 size={12} className="text-[#14171C] shrink-0" />
-          <input
-            value={job.link}
-            onChange={(e) => onLinkChange(job.id, e.target.value)}
-            placeholder="Paste upload / drive link..."
-            className="w-full bg-transparent border-b text-[11px] text-[#1D6FBD] placeholder-[#6B7280] outline-none pb-0.5"
-            style={{ borderColor: "#E2E5EA", fontFamily: "'IBM Plex Mono', monospace" }}
-          />
+          {job.link && !editingLink ? (
+            <>
+              <a
+                href={/^https?:\/\//i.test(job.link) ? job.link : `https://${job.link}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 min-w-0 truncate text-[11px] text-[#1D6FBD] underline"
+                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                {job.link}
+              </a>
+              <button onClick={() => setEditingLink(true)} className="text-[#6B7280] hover:text-[#1D6FBD] shrink-0">
+                <Pencil size={11} />
+              </button>
+            </>
+          ) : (
+            <input
+              autoFocus={editingLink}
+              value={job.link}
+              onChange={(e) => onLinkChange(job.id, e.target.value)}
+              onBlur={() => setEditingLink(false)}
+              onKeyDown={(e) => e.key === "Enter" && setEditingLink(false)}
+              placeholder="Paste upload / drive link..."
+              className="w-full bg-transparent border-b text-[11px] text-[#1D6FBD] placeholder-[#6B7280] outline-none pb-0.5"
+              style={{ borderColor: "#E2E5EA", fontFamily: "'IBM Plex Mono', monospace" }}
+            />
+          )}
         </div>
       )}
 
@@ -674,18 +772,27 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
   );
 }
 
-function AddJobModal({ onClose, onAdd, studentIdentity }) {
+function AddJobModal({ onClose, onAdd, studentIdentity, streams = [] }) {
   const [title, setTitle] = useState("");
-  const [type, setType] = useState("Video");
+  const [type, setType] = useState("Graphic");
   const [due, setDue] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [linkedStreamId, setLinkedStreamId] = useState("");
 
   const submit = () => {
     if (!title.trim() || !studentIdentity) return;
     onAdd({
       id: "j" + Date.now(), title: title.trim(), type, stage: "requested",
-      assignees: [], due: due || "TBD", link: "", createdBy: studentIdentity.name,
+      assignees: [], due: due || "TBD", eventDate: eventDate.trim(), link: "",
+      linkedStreamId, createdBy: studentIdentity.name,
     });
     onClose();
+  };
+
+  const pickLinkedStream = (id) => {
+    setLinkedStreamId(id);
+    const s = streams.find((x) => x.id === id);
+    if (s) setEventDate(s.date);
   };
 
   return (
@@ -712,6 +819,21 @@ function AddJobModal({ onClose, onAdd, studentIdentity }) {
         >
           {Object.keys(TYPE_ICON).map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
+        {streams.length > 0 && (
+          <select
+            value={linkedStreamId} onChange={(e) => pickLinkedStream(e.target.value)}
+            className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none"
+            style={{ borderColor: "#E2E5EA" }}
+          >
+            <option value="">Link to a calendar event (optional)</option>
+            {streams.map((s) => <option key={s.id} value={s.id}>{s.title} {s.opponent} — {s.date}</option>)}
+          </select>
+        )}
+        <input
+          value={eventDate} onChange={(e) => setEventDate(e.target.value)} placeholder="Event date (optional, e.g. Sep 4)"
+          className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
+          style={{ borderColor: "#E2E5EA" }}
+        />
         <input
           value={due} onChange={(e) => setDue(e.target.value)} placeholder="Due date (e.g. Aug 20)"
           className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
@@ -752,7 +874,8 @@ function BulkJobImportModal({ onClose, onBulkAdd, studentIdentity }) {
       .map((r) => ({
         id: "j" + Date.now() + Math.random().toString(36).slice(2, 7),
         title: r.title.trim(), type: r.type, stage: "requested",
-        assignees: [], due: r.due.trim() || "TBD", link: "",
+        assignees: [], due: r.due.trim() || "TBD", eventDate: r.eventDate.trim() || "",
+        link: "", linkedStreamId: "",
         createdBy: studentIdentity.name,
       }));
     onBulkAdd(jobs);
@@ -834,13 +957,28 @@ function BulkJobImportModal({ onClose, onBulkAdd, studentIdentity }) {
                     >
                       {Object.keys(TYPE_ICON).map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    <input
-                      value={row.due}
-                      onChange={(e) => updateRow(i, { due: e.target.value })}
-                      placeholder="Due date"
-                      className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1 text-[11px] text-[#14171C] outline-none"
-                      style={{ borderColor: "#E2E5EA" }}
-                    />
+                  </div>
+                  <div className="flex gap-1.5">
+                    <label className="flex-1">
+                      <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Event Date</span>
+                      <input
+                        value={row.eventDate}
+                        onChange={(e) => updateRow(i, { eventDate: e.target.value })}
+                        placeholder="Event date"
+                        className="w-full bg-[#EEF1F4] border rounded px-2 py-1 text-[11px] text-[#14171C] outline-none"
+                        style={{ borderColor: "#E2E5EA" }}
+                      />
+                    </label>
+                    <label className="flex-1">
+                      <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Due (Graphic)</span>
+                      <input
+                        value={row.due}
+                        onChange={(e) => updateRow(i, { due: e.target.value })}
+                        placeholder="Due date"
+                        className="w-full bg-[#EEF1F4] border rounded px-2 py-1 text-[11px] text-[#14171C] outline-none"
+                        style={{ borderColor: "#E2E5EA" }}
+                      />
+                    </label>
                   </div>
                 </div>
               ))}
@@ -2228,6 +2366,12 @@ export default function App() {
     setCalendarStreamId(null);
   };
 
+  const jumpToEvent = (streamId) => setCalendarStreamId(streamId);
+  const jumpToJobBoard = () => {
+    setCalendarStreamId(null);
+    setTab("content");
+  };
+
   // Signing in as admin drops you straight into the Admin panel instead of the
   // student-facing boards. Close it once and it stays closed for the rest of
   // the session — this only fires on the transition into admin access.
@@ -2587,6 +2731,8 @@ export default function App() {
                 accessLevel={accessLevel}
                 onRequireSignIn={requireSignIn}
                 onEditEvent={openEventEditor}
+                jobs={jobs}
+                onJumpToJob={jumpToJobBoard}
               />
             ))}
           </div>
@@ -2668,6 +2814,8 @@ export default function App() {
                           studentIdentity={effectiveIdentity}
                           accessLevel={accessLevel}
                           onRequireSignIn={requireSignIn}
+                          streams={streams}
+                          onJumpToEvent={jumpToEvent}
                         />
                       ))}
                       {stageJobs.length === 0 && (
@@ -2718,6 +2866,8 @@ export default function App() {
                 accessLevel={accessLevel}
                 onRequireSignIn={requireSignIn}
                 onEditEvent={openEventEditor}
+                jobs={jobs}
+                onJumpToJob={jumpToJobBoard}
               />
             </div>
           </div>
@@ -2729,6 +2879,7 @@ export default function App() {
           onClose={() => setShowAddJob(false)}
           onAdd={addJob}
           studentIdentity={effectiveIdentity}
+          streams={streams}
         />
       )}
 
@@ -2767,6 +2918,7 @@ export default function App() {
 
       {showAdmin && accessLevel === "admin" && (
         <AdminPanel
+          key={pendingEditId || "admin-panel"}
           streams={streams}
           onAdd={addStream}
           onUpdate={updateStream}
