@@ -94,8 +94,8 @@ function getRoleSlots(stream, role) {
 const SPECIAL_EVENT_SPORT = "Special Event";
 
 const TABS = [
-  { key: "live", label: "Stream Board", shortLabel: "Streams", icon: Camera },
   { key: "calendar", label: "Calendar", shortLabel: "Calendar", icon: Calendar },
+  { key: "live", label: "Stream Board", shortLabel: "Streams", icon: Camera },
   { key: "content", label: "Content Board", shortLabel: "Content", icon: Clapperboard },
   { key: "links", label: "Links", shortLabel: "Links", icon: ExternalLink },
 ];
@@ -217,7 +217,7 @@ function statusMeta(status) {
   return { color: "#5B6472", text: "#5B6472", label: "Wrapped", pulse: false };
 }
 
-function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEval, onAddAttendee, onRemoveAttendee, roster = [], studentIdentity, accessLevel, onRequireSignIn }) {
+function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEval, onAddAttendee, onRemoveAttendee, roster = [], studentIdentity, accessLevel, onRequireSignIn, onEditEvent }) {
   const meta = statusMeta(stream.status);
   const [rating, setRating] = useState({ video: 0, audio: 0, commentary: 0, overall: 0 });
   const [notes, setNotes] = useState("");
@@ -299,6 +299,15 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
 
       {expanded && (
         <div className="border-t px-4 py-4 space-y-5" style={{ borderColor: "#E2E5EA" }}>
+          {accessLevel === "admin" && onEditEvent && (
+            <button
+              onClick={() => onEditEvent(stream.id)}
+              className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-medium px-2.5 py-1.5 rounded border"
+              style={{ borderColor: "#1D6FBD", color: "#1D6FBD", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              <Pencil size={12} /> Edit Event Details
+            </button>
+          )}
           {isOpenCall ? (
             <div>
               <div className="text-[10px] uppercase tracking-[0.15em] text-[#14171C] mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -380,6 +389,22 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
                       >
                         <Circle size={12} /> {studentIdentity ? "Open — claim" : "Sign in to claim"}
                       </button>
+                    )}
+                    {accessLevel === "admin" && !full && roster.length > 0 && (
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const chosen = roster.find((r) => r.id === e.target.value);
+                          if (chosen) onClaim(stream.id, role, chosen.name, chosen.email);
+                        }}
+                        className="text-[10px] bg-transparent border rounded px-1 py-1 text-[#6B7280] outline-none"
+                        style={{ borderColor: "#E2E5EA" }}
+                      >
+                        <option value="">+ Assign from roster…</option>
+                        {roster
+                          .filter((r) => !fills.some((p) => p.name === r.name))
+                          .map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
                     )}
                   </div>
                 );
@@ -612,8 +637,13 @@ function AddJobModal({ onClose, onAdd, studentIdentity }) {
   );
 }
 
-function CalendarView({ streams, onSelectStream }) {
+function CalendarView({ streams, onSelectStream, onEditStream, accessLevel }) {
+  const [viewMode, setViewMode] = useState("month"); // 'month' | 'week'
   const [viewMonth, setViewMonth] = useState(() => new Date(SEASON_YEAR, 7, 1)); // Aug 2026
+  const [weekStart, setWeekStart] = useState(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), t.getDate() - t.getDay());
+  });
   const [selectedDay, setSelectedDay] = useState(null);
 
   const year = viewMonth.getFullYear();
@@ -639,14 +669,72 @@ function CalendarView({ streams, onSelectStream }) {
     setSelectedDay(null);
   };
 
+  const goWeek = (dir) => {
+    setWeekStart((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + dir * 7);
+      return d;
+    });
+  };
+
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const weekLabel = `${weekStart.toLocaleDateString([], { month: "short", day: "numeric" })} – ${weekDays[6].toLocaleDateString([], { month: "short", day: "numeric" })}`;
+
   const selectedEvents = selectedDay ? eventsOn(selectedDay) : [];
+
+  const EventRow = ({ ev }) => (
+    <div
+      className="w-full flex items-center gap-2 rounded border px-3 py-2"
+      style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFF" }}
+    >
+      <button onClick={() => onSelectStream(ev.id)} className="flex-1 min-w-0 text-left">
+        <div className="text-sm font-medium text-[#14171C] truncate">{ev.title}</div>
+        <div className="text-xs text-[#6B7280] truncate">{ev.opponent}</div>
+      </button>
+      <span
+        className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0"
+        style={{ color: "#FFFFFF", backgroundColor: CATEGORY_COLORS[eventCategory(ev)], fontFamily: "'IBM Plex Mono', monospace" }}
+      >
+        {ev.site === "Home" ? "Home" : "Away"} · {CATEGORY_LABELS[eventCategory(ev)]}
+      </span>
+      <span className="text-[11px] text-[#6B7280] shrink-0" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+        {ev.time}
+      </span>
+      {accessLevel === "admin" && onEditStream && (
+        <button onClick={() => onEditStream(ev.id)} className="text-[#6B7280] hover:text-[#1D6FBD] shrink-0" title="Edit event details">
+          <Pencil size={13} />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-y-2">
         <h2 className="text-[11px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
           Season Calendar
         </h2>
+        <div className="flex gap-1">
+          {[{ key: "month", label: "Month" }, { key: "week", label: "Week" }].map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => setViewMode(opt.key)}
+              className="text-[10px] uppercase tracking-wide px-2.5 py-1.5 rounded border"
+              style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                color: viewMode === opt.key ? "#FFFFFF" : "#14171C",
+                backgroundColor: viewMode === opt.key ? "#14171C" : "#F6F7F9",
+                borderColor: viewMode === opt.key ? "#14171C" : "#E2E5EA",
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-3">
@@ -661,96 +749,123 @@ function CalendarView({ streams, onSelectStream }) {
         </span>
       </div>
 
-      <div className="rounded-md border overflow-hidden" style={{ borderColor: "#E2E5EA" }}>
-        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
-          <button onClick={() => goMonth(-1)} className="text-[#14171C] hover:text-[#1D6FBD]">
-            <ChevronLeft size={18} />
-          </button>
-          <span className="text-sm font-semibold uppercase tracking-wide text-[#14171C]" style={{ fontFamily: "'Oswald', sans-serif" }}>
-            {monthLabel}
-          </span>
-          <button onClick={() => goMonth(1)} className="text-[#14171C] hover:text-[#1D6FBD]">
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-7 text-center text-[9px] uppercase tracking-wide text-[#6B7280] py-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace", backgroundColor: "#F6F7F9" }}>
-          {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i}>{d}</div>)}
-        </div>
-
-        <div className="grid grid-cols-7 gap-px" style={{ backgroundColor: "#E2E5EA" }}>
-          {cells.map((date, i) => {
-            if (!date) return <div key={i} className="min-h-[62px] sm:min-h-[76px]" style={{ backgroundColor: "#FAFBFC" }} />;
-            const dayEvents = eventsOn(date);
-            const isSelected = selectedDay && sameDay(selectedDay, date);
-            const isToday = sameDay(date, today);
-            return (
-              <button
-                key={i}
-                onClick={() => dayEvents.length > 0 && setSelectedDay(isSelected ? null : date)}
-                disabled={dayEvents.length === 0}
-                className="min-h-[62px] sm:min-h-[76px] p-1 flex flex-col items-start gap-0.5 text-left disabled:cursor-default"
-                style={{ backgroundColor: isSelected ? "#EEF1F4" : "#FFFFFF" }}
-              >
-                <span
-                  className="text-[10px] px-1 rounded"
-                  style={{
-                    fontFamily: "'IBM Plex Mono', monospace",
-                    color: isToday ? "#FFFFFF" : "#14171C",
-                    backgroundColor: isToday ? "#14171C" : "transparent",
-                  }}
-                >
-                  {date.getDate()}
-                </span>
-                {dayEvents.slice(0, 3).map((ev) => {
-                  const c = CATEGORY_COLORS[eventCategory(ev)];
-                  const siteLetter = ev.site === "Home" ? "H" : "A";
-                  return (
-                    <span
-                      key={ev.id}
-                      className="text-[8px] sm:text-[9px] uppercase tracking-wide px-1 rounded truncate w-full"
-                      style={{ color: "#FFFFFF", backgroundColor: c, fontFamily: "'IBM Plex Mono', monospace" }}
-                    >
-                      {sportAbbr(ev.sportKey)}·{siteLetter}
-                    </span>
-                  );
-                })}
-                {dayEvents.length > 3 && (
-                  <span className="text-[8px] text-[#6B7280]">+{dayEvents.length - 3} more</span>
-                )}
+      {viewMode === "month" ? (
+        <>
+          <div className="rounded-md border overflow-hidden" style={{ borderColor: "#E2E5EA" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+              <button onClick={() => goMonth(-1)} className="text-[#14171C] hover:text-[#1D6FBD]">
+                <ChevronLeft size={18} />
               </button>
-            );
-          })}
-        </div>
-      </div>
+              <span className="text-sm font-semibold uppercase tracking-wide text-[#14171C]" style={{ fontFamily: "'Oswald', sans-serif" }}>
+                {monthLabel}
+              </span>
+              <button onClick={() => goMonth(1)} className="text-[#14171C] hover:text-[#1D6FBD]">
+                <ChevronRight size={18} />
+              </button>
+            </div>
 
-      {selectedDay && (
-        <div className="mt-3 rounded-md border px-4 py-3 space-y-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
-          <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-            {selectedDay.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
+            <div className="grid grid-cols-7 text-center text-[9px] uppercase tracking-wide text-[#6B7280] py-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace", backgroundColor: "#F6F7F9" }}>
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i}>{d}</div>)}
+            </div>
+
+            <div className="grid grid-cols-7 gap-px" style={{ backgroundColor: "#E2E5EA" }}>
+              {cells.map((date, i) => {
+                if (!date) return <div key={i} className="min-h-[62px] sm:min-h-[76px]" style={{ backgroundColor: "#FAFBFC" }} />;
+                const dayEvents = eventsOn(date);
+                const isSelected = selectedDay && sameDay(selectedDay, date);
+                const isToday = sameDay(date, today);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => dayEvents.length > 0 && setSelectedDay(isSelected ? null : date)}
+                    disabled={dayEvents.length === 0}
+                    className="min-h-[62px] sm:min-h-[76px] p-1 flex flex-col items-start gap-0.5 text-left disabled:cursor-default"
+                    style={{ backgroundColor: isSelected ? "#EEF1F4" : "#FFFFFF" }}
+                  >
+                    <span
+                      className="text-[10px] px-1 rounded"
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        color: isToday ? "#FFFFFF" : "#14171C",
+                        backgroundColor: isToday ? "#14171C" : "transparent",
+                      }}
+                    >
+                      {date.getDate()}
+                    </span>
+                    {dayEvents.slice(0, 3).map((ev) => {
+                      const c = CATEGORY_COLORS[eventCategory(ev)];
+                      const siteLetter = ev.site === "Home" ? "H" : "A";
+                      return (
+                        <span
+                          key={ev.id}
+                          className="text-[8px] sm:text-[9px] uppercase tracking-wide px-1 rounded truncate w-full"
+                          style={{ color: "#FFFFFF", backgroundColor: c, fontFamily: "'IBM Plex Mono', monospace" }}
+                        >
+                          {sportAbbr(ev.sportKey)}·{siteLetter}
+                        </span>
+                      );
+                    })}
+                    {dayEvents.length > 3 && (
+                      <span className="text-[8px] text-[#6B7280]">+{dayEvents.length - 3} more</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          {selectedEvents.map((ev) => (
-            <button
-              key={ev.id}
-              onClick={() => onSelectStream(ev.id)}
-              className="w-full flex items-center justify-between gap-3 rounded border px-3 py-2 text-left"
-              style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFF" }}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-[#14171C] truncate">{ev.title}</div>
-                <div className="text-xs text-[#6B7280] truncate">{ev.opponent}</div>
+
+          {selectedDay && (
+            <div className="mt-3 rounded-md border px-4 py-3 space-y-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+              <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                {selectedDay.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
               </div>
-              <span
-                className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0"
-                style={{ color: "#FFFFFF", backgroundColor: CATEGORY_COLORS[eventCategory(ev)], fontFamily: "'IBM Plex Mono', monospace" }}
-              >
-                {ev.site === "Home" ? "Home" : "Away"} · {CATEGORY_LABELS[eventCategory(ev)]}
-              </span>
-              <span className="text-[11px] text-[#6B7280] shrink-0" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                {ev.time}
-              </span>
+              {selectedEvents.map((ev) => <EventRow key={ev.id} ev={ev} />)}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="rounded-md border overflow-hidden" style={{ borderColor: "#E2E5EA" }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+            <button onClick={() => goWeek(-1)} className="text-[#14171C] hover:text-[#1D6FBD]">
+              <ChevronLeft size={18} />
             </button>
-          ))}
+            <span className="text-sm font-semibold uppercase tracking-wide text-[#14171C]" style={{ fontFamily: "'Oswald', sans-serif" }}>
+              {weekLabel}
+            </span>
+            <button onClick={() => goWeek(1)} className="text-[#14171C] hover:text-[#1D6FBD]">
+              <ChevronRight size={18} />
+            </button>
+          </div>
+          <div className="divide-y" style={{ borderColor: "#E2E5EA" }}>
+            {weekDays.map((date, i) => {
+              const dayEvents = eventsOn(date);
+              const isToday = sameDay(date, today);
+              return (
+                <div key={i} className="px-4 py-3" style={{ borderColor: "#E2E5EA" }}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span
+                      className="text-[11px] uppercase tracking-wide px-1.5 py-0.5 rounded"
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        color: isToday ? "#FFFFFF" : "#14171C",
+                        backgroundColor: isToday ? "#14171C" : "transparent",
+                        fontWeight: isToday ? 600 : 400,
+                      }}
+                    >
+                      {date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                  {dayEvents.length === 0 ? (
+                    <p className="text-xs text-[#6B7280] pl-1">No events</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {dayEvents.map((ev) => <EventRow key={ev.id} ev={ev} />)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -865,6 +980,7 @@ function AdminPanel({
   streams, onAdd, onUpdate, onDelete, onClose, passcodes, onUpdatePasscodes,
   roster, onAddRosterEntry, onAddRosterEntries, onDeleteRosterEntry,
   reminderHours, onUpdateReminderHours, adminName, onUpdateAdminName,
+  initialEditId, onConsumedInitialEdit,
 }) {
   const [adminTab, setAdminTab] = useState("schedule");
   const [scheduleSortBy, setScheduleSortBy] = useState("date"); // 'date' | 'type' | 'sport'
@@ -1079,6 +1195,18 @@ function AdminPanel({
     });
     if (modalScrollRef.current) modalScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  // Jumping in here from the Calendar (or anywhere) via "Edit Event Details" —
+  // land on the Schedule tab with that event already loaded into the form.
+  useEffect(() => {
+    if (!initialEditId) return;
+    const match = streams.find((s) => s.id === initialEditId);
+    if (match) {
+      setAdminTab("schedule");
+      startEdit(match);
+    }
+    onConsumedInitialEdit();
+  }, [initialEditId]);
 
   const setRoleSlotCount = (role, n) => {
     setForm((f) => ({ ...f, roleSlots: { ...f.roleSlots, [role]: Math.max(1, n) } }));
@@ -1842,7 +1970,7 @@ export default function App() {
   const [passcodes, setPasscodesLocal] = useState({ student: "TIGERS2026", admin: "KRAZOADMIN" });
   const [adminName, setAdminNameLocal] = useState("Producer");
   const [reminderHours, setReminderHoursLocal] = useState(24);
-  const [tab, setTab] = useState("live");
+  const [tab, setTab] = useState("calendar");
   const [streams, setStreams] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [links, setLinks] = useState([]);
@@ -1857,8 +1985,15 @@ export default function App() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [jobSortBy, setJobSortBy] = useState("due"); // 'due' | 'title'
   const [calendarStreamId, setCalendarStreamId] = useState(null);
+  const [pendingEditId, setPendingEditId] = useState(null);
 
   const requireSignIn = () => setShowSignIn(true);
+
+  const openEventEditor = (streamId) => {
+    setPendingEditId(streamId);
+    setShowAdmin(true);
+    setCalendarStreamId(null);
+  };
 
   // Signing in as admin drops you straight into the Admin panel instead of the
   // student-facing boards. Close it once and it stays closed for the rest of
@@ -2212,13 +2347,14 @@ export default function App() {
                 studentIdentity={effectiveIdentity}
                 accessLevel={accessLevel}
                 onRequireSignIn={requireSignIn}
+                onEditEvent={openEventEditor}
               />
             ))}
           </div>
         )}
 
         {tab === "calendar" && (
-          <CalendarView streams={streams} onSelectStream={setCalendarStreamId} />
+          <CalendarView streams={streams} onSelectStream={setCalendarStreamId} onEditStream={openEventEditor} accessLevel={accessLevel} />
         )}
 
         {tab === "content" && (
@@ -2334,6 +2470,7 @@ export default function App() {
                 studentIdentity={effectiveIdentity}
                 accessLevel={accessLevel}
                 onRequireSignIn={requireSignIn}
+                onEditEvent={openEventEditor}
               />
             </div>
           </div>
@@ -2390,6 +2527,8 @@ export default function App() {
           onUpdateReminderHours={setReminderHours}
           adminName={adminName}
           onUpdateAdminName={setAdminName}
+          initialEditId={pendingEditId}
+          onConsumedInitialEdit={() => setPendingEditId(null)}
         />
       )}
 
