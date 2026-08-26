@@ -48,6 +48,38 @@ const emptyRoles = {
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DAY_OFFSET = { monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6 };
+function nextMondayISO() {
+  const t = new Date();
+  const day = t.getDay(); // 0=Sun..6=Sat
+  const daysUntilMon = day === 1 ? 0 : (8 - day) % 7;
+  const monday = new Date(t.getFullYear(), t.getMonth(), t.getDate() + daysUntilMon);
+  const mm = String(monday.getMonth() + 1).padStart(2, "0");
+  const dd = String(monday.getDate()).padStart(2, "0");
+  return `${monday.getFullYear()}-${mm}-${dd}`;
+}
+function parseScheduleText(text, mondayISO) {
+  const [y, m, d] = mondayISO.split("-").map(Number);
+  const monday = new Date(y, m - 1, d);
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const jobs = [];
+  let offset = null;
+  lines.forEach((line) => {
+    const key = line.toLowerCase().replace(/[:\s]+$/, "");
+    if (DAY_OFFSET.hasOwnProperty(key)) {
+      offset = DAY_OFFSET[key];
+      return;
+    }
+    if (offset === null) return;
+    const eventDate = new Date(monday);
+    eventDate.setDate(eventDate.getDate() + offset);
+    const due = new Date(eventDate);
+    due.setDate(due.getDate() - 2); // 48 hours before the event
+    jobs.push({ title: line, due: `${MONTHS[due.getMonth()]} ${due.getDate()}`, type: "Graphic" });
+  });
+  return jobs;
+}
+
 const SEASON_YEAR = 2026;
 
 function parseStreamDate(dateStr) {
@@ -486,19 +518,73 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
   );
 }
 
-function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, studentIdentity, accessLevel, onRequireSignIn }) {
+function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEditJob, studentIdentity, accessLevel, onRequireSignIn }) {
   const stageIdx = STAGES.findIndex((s) => s.key === job.stage);
   const Icon = TYPE_ICON[job.type] || FileVideo;
   const showLoad = job.stage === "review" || job.stage === "published";
   const assignees = Array.isArray(job.assignees) ? job.assignees : (job.assignee ? [{ name: job.assignee }] : []);
   const alreadyOn = studentIdentity && assignees.some((a) => a.name === studentIdentity.name);
   const canKick = (name) => accessLevel === "admin" || (studentIdentity && studentIdentity.name === name);
+  const canEdit = accessLevel === "admin" || (studentIdentity && job.createdBy === studentIdentity.name);
+
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(job.title);
+  const [editType, setEditType] = useState(job.type);
+  const [editDue, setEditDue] = useState(job.due);
 
   const pickUp = () => {
     if (!studentIdentity) { onRequireSignIn(); return; }
     if (alreadyOn) return;
     onPickUp(job.id, studentIdentity.name);
   };
+
+  const saveEdit = () => {
+    if (!editTitle.trim()) return;
+    onEditJob(job.id, { title: editTitle.trim(), type: editType, due: editDue.trim() || "TBD" });
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="rounded-md border px-3 py-3 space-y-2" style={{ borderColor: "#1D6FBD", backgroundColor: "#F6F7F9" }}>
+        <input
+          value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+          className="w-full bg-[#EEF1F4] border rounded px-2 py-1.5 text-sm text-[#14171C] outline-none"
+          style={{ borderColor: "#E2E5EA" }}
+        />
+        <div className="flex gap-2">
+          <select
+            value={editType} onChange={(e) => setEditType(e.target.value)}
+            className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+            style={{ borderColor: "#E2E5EA" }}
+          >
+            {Object.keys(TYPE_ICON).map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <input
+            value={editDue} onChange={(e) => setEditDue(e.target.value)} placeholder="Due date"
+            className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+            style={{ borderColor: "#E2E5EA" }}
+          />
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={saveEdit}
+            className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
+            style={{ backgroundColor: "#1D6FBD", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+          >
+            Save
+          </button>
+          <button
+            onClick={() => setEditing(false)}
+            className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border"
+            style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-md border px-3 py-3 space-y-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
@@ -514,9 +600,16 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, studen
             )}
           </div>
         </div>
-        <button onClick={() => onDelete(job.id)} className="text-[#14171C] hover:text-[#E8362E] shrink-0">
-          <Trash2 size={13} />
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {canEdit && (
+            <button onClick={() => setEditing(true)} className="text-[#14171C] hover:text-[#1D6FBD]">
+              <Pencil size={13} />
+            </button>
+          )}
+          <button onClick={() => onDelete(job.id)} className="text-[#14171C] hover:text-[#E8362E]">
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -632,6 +725,145 @@ function AddJobModal({ onClose, onAdd, studentIdentity }) {
         >
           Add to Requested
         </button>
+      </div>
+    </div>
+  );
+}
+
+function BulkJobImportModal({ onClose, onBulkAdd, studentIdentity }) {
+  const [mondayISO, setMondayISO] = useState(nextMondayISO);
+  const [rawText, setRawText] = useState("");
+  const [parsed, setParsed] = useState(null); // null until Parse clicked
+
+  const doParse = () => {
+    if (!rawText.trim()) return;
+    setParsed(parseScheduleText(rawText, mondayISO));
+  };
+
+  const updateRow = (i, patch) => {
+    setParsed((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  };
+  const removeRow = (i) => setParsed((rows) => rows.filter((_, idx) => idx !== i));
+
+  const confirmAdd = () => {
+    if (!parsed || parsed.length === 0 || !studentIdentity) return;
+    const jobs = parsed
+      .filter((r) => r.title.trim())
+      .map((r) => ({
+        id: "j" + Date.now() + Math.random().toString(36).slice(2, 7),
+        title: r.title.trim(), type: r.type, stage: "requested",
+        assignees: [], due: r.due.trim() || "TBD", link: "",
+        createdBy: studentIdentity.name,
+      }));
+    onBulkAdd(jobs);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 overflow-y-auto px-4 py-6">
+      <div
+        className="w-full max-w-lg mx-auto rounded-md border p-5 space-y-3"
+        style={{ backgroundColor: "#FFFFFF", borderColor: "#E2E5EA" }}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm uppercase tracking-wide font-semibold text-[#14171C]" style={{ fontFamily: "'Oswald', sans-serif" }}>
+            Import Jobs From Schedule
+          </h3>
+          <button onClick={onClose} className="text-[#14171C] hover:text-[#14171C]"><X size={16} /></button>
+        </div>
+
+        {!parsed ? (
+          <>
+            <p className="text-xs text-[#6B7280]">
+              Paste a weekly schedule with day names on their own line (Monday, Tuesday, ...) followed by one event per line — like what you'd copy straight out of an email. Each line becomes a Graphic job, due 48 hours before that event (editable per row below).
+            </p>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                Monday of that week
+              </span>
+              <input
+                type="date"
+                value={mondayISO}
+                onChange={(e) => setMondayISO(e.target.value)}
+                className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none mt-1"
+                style={{ borderColor: "#E2E5EA" }}
+              />
+            </label>
+            <textarea
+              value={rawText}
+              onChange={(e) => setRawText(e.target.value)}
+              placeholder={"Monday\nTennis (V/JV) @ Lebanon- 4:30 p.m.\nJV Football @ Neosho- 6:00 p.m.\n..."}
+              rows={10}
+              className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-xs text-[#14171C] placeholder-[#6B7280] outline-none resize-none"
+              style={{ borderColor: "#E2E5EA", fontFamily: "'IBM Plex Mono', monospace" }}
+            />
+            <button
+              onClick={doParse}
+              className="w-full text-xs uppercase tracking-wide font-medium py-2 rounded"
+              style={{ backgroundColor: "#1D6FBD", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              Parse Schedule
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-xs text-[#6B7280]">
+              Found {parsed.length} event{parsed.length === 1 ? "" : "s"}. Edit anything below, remove ones you don't want, then add them all as jobs.
+            </p>
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {parsed.length === 0 && (
+                <p className="text-xs text-[#C42B22]">No day headers were recognized — make sure each day (Monday, Tuesday...) is on its own line.</p>
+              )}
+              {parsed.map((row, i) => (
+                <div key={i} className="rounded border px-2.5 py-2 space-y-1.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      value={row.title}
+                      onChange={(e) => updateRow(i, { title: e.target.value })}
+                      className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+                      style={{ borderColor: "#E2E5EA" }}
+                    />
+                    <button onClick={() => removeRow(i)} className="text-[#6B7280] hover:text-[#E8362E] shrink-0"><X size={14} /></button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <select
+                      value={row.type}
+                      onChange={(e) => updateRow(i, { type: e.target.value })}
+                      className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1 text-[11px] text-[#14171C] outline-none"
+                      style={{ borderColor: "#E2E5EA" }}
+                    >
+                      {Object.keys(TYPE_ICON).map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <input
+                      value={row.due}
+                      onChange={(e) => updateRow(i, { due: e.target.value })}
+                      placeholder="Due date"
+                      className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1 text-[11px] text-[#14171C] outline-none"
+                      style={{ borderColor: "#E2E5EA" }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmAdd}
+                disabled={parsed.length === 0}
+                className="flex-1 text-xs uppercase tracking-wide font-medium py-2 rounded disabled:opacity-40"
+                style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                Add {parsed.length} Job{parsed.length === 1 ? "" : "s"} to Board
+              </button>
+              <button
+                onClick={() => setParsed(null)}
+                className="text-xs uppercase tracking-wide font-medium px-3 py-2 rounded border"
+                style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                Back
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1978,6 +2210,7 @@ export default function App() {
   const [dataReady, setDataReady] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [showAddJob, setShowAddJob] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [clock, setClock] = useState(new Date());
   const [sortBy, setSortBy] = useState("date"); // 'date' | 'sport'
@@ -2151,6 +2384,12 @@ export default function App() {
   const deleteJob = (id) => deleteDoc(doc(db, "jobs", id));
   const linkChange = (id, link) => updateDoc(doc(db, "jobs", id), { link });
   const addJob = (job) => setDoc(doc(db, "jobs", job.id), job);
+  const editJob = (id, patch) => updateDoc(doc(db, "jobs", id), patch);
+  const bulkAddJobs = async (newJobs) => {
+    const batch = writeBatch(db);
+    newJobs.forEach((j) => batch.set(doc(db, "jobs", j.id), j));
+    await batch.commit();
+  };
 
   const pickUpJob = (id, name) => {
     const job = jobs.find((j) => j.id === id);
@@ -2385,6 +2624,13 @@ export default function App() {
                   ))}
                 </div>
                 <button
+                  onClick={() => (effectiveIdentity ? setShowBulkImport(true) : requireSignIn())}
+                  className="flex items-center gap-1.5 text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border"
+                  style={{ borderColor: "#1D6FBD", color: "#1D6FBD", fontFamily: "'IBM Plex Mono', monospace" }}
+                >
+                  <Upload size={13} /> Import From Schedule
+                </button>
+                <button
                   onClick={() => (effectiveIdentity ? setShowAddJob(true) : requireSignIn())}
                   className="flex items-center gap-1.5 text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
                   style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
@@ -2418,6 +2664,7 @@ export default function App() {
                           onLinkChange={linkChange}
                           onPickUp={pickUpJob}
                           onKick={kickFromJob}
+                          onEditJob={editJob}
                           studentIdentity={effectiveIdentity}
                           accessLevel={accessLevel}
                           onRequireSignIn={requireSignIn}
@@ -2481,6 +2728,14 @@ export default function App() {
         <AddJobModal
           onClose={() => setShowAddJob(false)}
           onAdd={addJob}
+          studentIdentity={effectiveIdentity}
+        />
+      )}
+
+      {showBulkImport && (
+        <BulkJobImportModal
+          onClose={() => setShowBulkImport(false)}
+          onBulkAdd={bulkAddJobs}
           studentIdentity={effectiveIdentity}
         />
       )}
