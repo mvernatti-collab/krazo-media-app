@@ -108,6 +108,15 @@ function isPastDate(stream) {
   const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   return eventDate.getTime() < todayMidnight.getTime();
 }
+function isJobPast(job) {
+  if (!job.eventDate) return false;
+  const parts = job.eventDate.trim().split(" ");
+  if (parts.length < 2 || MONTHS.indexOf(parts[0]) === -1) return false;
+  const eventDate = parseStreamDate(job.eventDate);
+  const today = new Date();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return eventDate.getTime() < todayMidnight.getTime();
+}
 function parseBool(val, fallback) {
   if (val === undefined || val === null || String(val).trim() === "") return fallback;
   const v = String(val).trim().toLowerCase();
@@ -446,29 +455,32 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
                         )}
                       </div>
                     ))}
-                    {!full && !alreadyIn && (
-                      <button
-                        onClick={() => claimRoleSlot(role)}
-                        className="text-sm text-[#1D6FBD] hover:text-[#125A99] text-left flex items-center gap-1"
-                      >
-                        <Circle size={12} /> {studentIdentity ? "Open — claim" : "Sign in to claim"}
-                      </button>
-                    )}
-                    {accessLevel === "admin" && !full && roster.length > 0 && (
+                    {!full && accessLevel === "admin" && roster.length > 0 && (
                       <select
                         value=""
                         onChange={(e) => {
                           const chosen = roster.find((r) => r.id === e.target.value);
                           if (chosen) onClaim(stream.id, role, chosen.name, chosen.email);
                         }}
-                        className="text-[10px] bg-transparent border rounded px-1 py-1 text-[#6B7280] outline-none"
-                        style={{ borderColor: "#E2E5EA" }}
+                        className="text-[11px] bg-[#FFFFFF] border rounded px-1.5 py-1.5 text-[#14171C] outline-none font-medium"
+                        style={{ borderColor: "#1D6FBD" }}
                       >
-                        <option value="">+ Assign from roster…</option>
+                        <option value="">+ Assign student…</option>
                         {roster
                           .filter((r) => !fills.some((p) => p.name === r.name))
                           .map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                       </select>
+                    )}
+                    {!full && !alreadyIn && (
+                      <button
+                        onClick={() => claimRoleSlot(role)}
+                        className="text-[11px] text-[#6B7280] hover:text-[#1D6FBD] text-left flex items-center gap-1"
+                      >
+                        <Circle size={10} />
+                        {accessLevel === "admin"
+                          ? "...or claim it yourself"
+                          : (studentIdentity ? "Open — claim" : "Sign in to claim")}
+                      </button>
                     )}
                   </div>
                 );
@@ -550,7 +562,7 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
   );
 }
 
-function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEditJob, studentIdentity, accessLevel, onRequireSignIn, streams = [], onJumpToEvent }) {
+function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEditJob, studentIdentity, accessLevel, onRequireSignIn, streams = [], onJumpToEvent, roster = [] }) {
   const stageIdx = STAGES.findIndex((s) => s.key === job.stage);
   const Icon = TYPE_ICON[job.type] || FileVideo;
   const showLoad = job.stage === "review" || job.stage === "published";
@@ -688,13 +700,32 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
             )}
           </span>
         ))}
+        {!alreadyOn && accessLevel === "admin" && roster.length > 0 && (
+          <select
+            value=""
+            onChange={(e) => {
+              const chosen = roster.find((r) => r.id === e.target.value);
+              if (chosen && !assignees.some((a) => a.name === chosen.name)) onPickUp(job.id, chosen.name);
+            }}
+            className="text-[11px] bg-[#FFFFFF] border rounded px-1.5 py-1 text-[#14171C] outline-none font-medium"
+            style={{ borderColor: "#1D6FBD" }}
+          >
+            <option value="">+ Assign student…</option>
+            {roster
+              .filter((r) => !assignees.some((a) => a.name === r.name))
+              .map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        )}
         {!alreadyOn && (
           <button
             onClick={pickUp}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded border"
             style={{ borderColor: "#1D6FBD", color: "#1D6FBD" }}
           >
-            <Circle size={10} /> {studentIdentity ? "Pick up this job" : "Sign in to pick up"}
+            <Circle size={10} />
+            {accessLevel === "admin"
+              ? "...or pick it up yourself"
+              : (studentIdentity ? "Pick up this job" : "Sign in to pick up")}
           </button>
         )}
       </div>
@@ -1347,7 +1378,7 @@ function emptyEventForm() {
 }
 
 function AdminPanel({
-  streams, onAdd, onUpdate, onDelete, onClose, passcodes, onUpdatePasscodes,
+  streams, onAdd, onUpdate, onDelete, passcodes, onUpdatePasscodes,
   roster, onAddRosterEntry, onAddRosterEntries, onDeleteRosterEntry,
   reminderHours, onUpdateReminderHours, adminName, onUpdateAdminName,
   initialEditId, onConsumedInitialEdit,
@@ -1369,7 +1400,6 @@ function AdminPanel({
   const [reminderSaved, setReminderSaved] = useState(false);
   const fileInputRef = useRef(null);
   const rosterFileInputRef = useRef(null);
-  const modalScrollRef = useRef(null);
 
   const saveAdminName = () => {
     if (!adminNameInput.trim()) return;
@@ -1482,6 +1512,15 @@ function AdminPanel({
     awayWithOpenPositions.forEach((s) => onUpdate(s.id, { openRoles: [], needsVideoBoard: false }));
   };
 
+  const awayMarkedLivestream = streams.filter(
+    (s) => s.site === "Away" && s.sportKey !== SPECIAL_EVENT_SPORT && !s.openSignup
+  );
+  const fixAwayCategory = () => {
+    if (awayMarkedLivestream.length === 0) return;
+    if (!window.confirm(`Recategorize ${awayMarkedLivestream.length} away game(s) from Livestream to Content Only? This is just the calendar color/type — you can flip any of them back individually any time.`)) return;
+    awayMarkedLivestream.forEach((s) => onUpdate(s.id, { openSignup: true }));
+  };
+
   const downloadTemplate = () => {
     const csv = [
       "category,sport,title,opponent,site,date,time,kind,needsvideoboard,includeinboard",
@@ -1563,7 +1602,7 @@ function AdminPanel({
       includeInBoard: s.includeInBoard !== false,
       status: s.status || "upcoming",
     });
-    if (modalScrollRef.current) modalScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Jumping in here from the Calendar (or anywhere) via "Edit Event Details" —
@@ -1592,13 +1631,15 @@ function AdminPanel({
   const resetForm = () => { setEditingId(null); setForm(emptyEventForm()); };
 
   const setSite = (site) => {
-    // New events: Home defaults to included + full crew; Away defaults to excluded + no positions.
+    // New events: Home defaults to Livestream + included + full crew.
+    // Away defaults to Content Only + excluded + no positions.
     // Editing an existing event never auto-resets these — only the person editing chooses to change them.
     setForm((f) => ({
       ...f,
       site,
       includeInBoard: editingId ? f.includeInBoard : site === "Home",
       openRoles: editingId ? f.openRoles : (site === "Home" ? [...ROLES] : []),
+      kind: editingId ? f.kind : (site === "Home" ? "broadcast" : "content"),
     }));
   };
 
@@ -1653,23 +1694,15 @@ function AdminPanel({
   };
 
   return (
-    <div ref={modalScrollRef} className="fixed inset-0 z-50 bg-black/40 overflow-y-auto px-4 py-6" onClick={onClose}>
-      <div
-        className="w-full max-w-lg mx-auto rounded-md border"
-        style={{ backgroundColor: "#FFFFFF", borderColor: "#E2E5EA" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b sticky top-0 rounded-t-md" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
-          <div className="flex items-center gap-2">
-            <Settings size={15} className="text-[#14171C]" />
-            <h3 className="text-sm uppercase tracking-wide font-semibold text-[#14171C]" style={{ fontFamily: "'Oswald', sans-serif" }}>
-              Admin
-            </h3>
-          </div>
-          <button onClick={onClose} className="text-[#6B7280] hover:text-[#14171C]"><X size={16} /></button>
-        </div>
+    <div>
+      <div className="flex items-center gap-2 mb-4">
+        <Settings size={15} className="text-[#14171C]" />
+        <h3 className="text-sm uppercase tracking-wide font-semibold text-[#14171C]" style={{ fontFamily: "'Oswald', sans-serif" }}>
+          Admin
+        </h3>
+      </div>
 
-        <div className="flex gap-1 px-4 pt-3 border-b overflow-x-auto" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+      <div className="flex gap-1 border-b overflow-x-auto mb-4" style={{ borderColor: "#E2E5EA" }}>
           {[
             { key: "schedule", label: "Schedule" },
             { key: "roster", label: `Roster (${roster.length})` },
@@ -1694,10 +1727,28 @@ function AdminPanel({
         <div className="p-4 space-y-4">
           {adminTab === "schedule" && (
             <>
+          {awayMarkedLivestream.length > 0 && (
+            <div className="rounded border px-3 py-3 space-y-2" style={{ borderColor: "#14171C", backgroundColor: "#14171C11" }}>
+              <div className="text-[10px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                Quick Fix — Calendar Color
+              </div>
+              <p className="text-[11px] text-[#14171C]">
+                {awayMarkedLivestream.length} away game{awayMarkedLivestream.length === 1 ? " is" : "s are"} still marked Livestream, so they show up red on the Calendar even though they're not being broadcast. Switch them to Content Only so the calendar color actually matches reality — you can flip any individual one back to Livestream any time.
+              </p>
+              <button
+                onClick={fixAwayCategory}
+                className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
+                style={{ backgroundColor: "#14171C", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                Recategorize All {awayMarkedLivestream.length} to Content Only
+              </button>
+            </div>
+          )}
+
           {awayWithOpenPositions.length > 0 && (
             <div className="rounded border px-3 py-3 space-y-2" style={{ borderColor: "#ED1C24", backgroundColor: "#ED1C2411" }}>
               <div className="text-[10px] uppercase tracking-[0.15em] text-[#ED1C24]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                Quick Fix
+                Quick Fix — Positions
               </div>
               <p className="text-[11px] text-[#14171C]">
                 {awayWithOpenPositions.length} away game{awayWithOpenPositions.length === 1 ? " has" : "s have"} open crew positions students can sign up for, even though nothing's actually being covered. Clear them to zero — sign-up stays available on each, you'll just need to manually open the specific positions you actually want covered.
@@ -2218,7 +2269,6 @@ function AdminPanel({
           )}
         </div>
       </div>
-    </div>
   );
 }
 
@@ -2349,12 +2399,12 @@ export default function App() {
   const [expandedId, setExpandedId] = useState(null);
   const [showAddJob, setShowAddJob] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
   const [clock, setClock] = useState(new Date());
   const [sortBy, setSortBy] = useState("date"); // 'date' | 'sport'
   const [sportFilter, setSportFilter] = useState("All");
   const [showCompleted, setShowCompleted] = useState(false);
   const [jobSortBy, setJobSortBy] = useState("due"); // 'due' | 'title'
+  const [showArchivedJobs, setShowArchivedJobs] = useState(false);
   const [calendarStreamId, setCalendarStreamId] = useState(null);
   const [pendingEditId, setPendingEditId] = useState(null);
 
@@ -2362,7 +2412,7 @@ export default function App() {
 
   const openEventEditor = (streamId) => {
     setPendingEditId(streamId);
-    setShowAdmin(true);
+    setTab("admin");
     setCalendarStreamId(null);
   };
 
@@ -2372,11 +2422,11 @@ export default function App() {
     setTab("content");
   };
 
-  // Signing in as admin drops you straight into the Admin panel instead of the
-  // student-facing boards. Close it once and it stays closed for the rest of
-  // the session — this only fires on the transition into admin access.
+  // Signing in as admin drops you straight into your own Admin tab instead of
+  // the student-facing boards — it's just another tab from here on, so you can
+  // freely switch to Calendar/Stream Board/etc. and back without losing anything.
   useEffect(() => {
-    if (accessLevel === "admin") setShowAdmin(true);
+    if (accessLevel === "admin") setTab("admin");
   }, [accessLevel]);
 
   useEffect(() => {
@@ -2559,6 +2609,9 @@ export default function App() {
   const effectiveIdentity = studentIdentity || (accessLevel === "admin" ? { id: "admin", name: adminName, email: "" } : null);
 
   const liveCount = streams.filter((s) => s.status === "live").length;
+  const visibleTabs = accessLevel === "admin"
+    ? [...TABS, { key: "admin", label: "Admin", shortLabel: "Admin", icon: Settings }]
+    : TABS;
 
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor: "#FFFFFF" }}>
@@ -2612,15 +2665,6 @@ export default function App() {
                 <KeyRound size={13} /> <span className="hidden sm:inline">Sign In</span>
               </button>
             )}
-            {accessLevel === "admin" && (
-              <button
-                onClick={() => setShowAdmin(true)}
-                className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-medium px-2.5 py-1.5 rounded border"
-                style={{ borderColor: "#E2E5EA", color: "#14171C", fontFamily: "'IBM Plex Mono', monospace" }}
-              >
-                <Settings size={13} /> <span className="hidden sm:inline">Admin</span>
-              </button>
-            )}
             <button
               onClick={() => { setAccessLevel(null); setStudentIdentity(null); }}
               title="Lock / switch access code"
@@ -2634,7 +2678,7 @@ export default function App() {
 
         {/* Tab / tally switcher — desktop only, mobile uses the bottom nav bar */}
         <div className="hidden sm:flex max-w-5xl mx-auto px-4 sm:px-6 gap-1 pb-2">
-          {TABS.map(({ key, label, icon: Icon }) => {
+          {visibleTabs.map(({ key, label, icon: Icon }) => {
             const active = tab === key;
             return (
               <button
@@ -2744,11 +2788,32 @@ export default function App() {
 
         {tab === "content" && (
           <div>
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-y-2">
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-y-2">
               <h2 className="text-[11px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                 Production Pipeline
               </h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                {[{ key: false, label: `Active (${jobs.filter((j) => !isJobPast(j)).length})` }, { key: true, label: `Archived (${jobs.filter(isJobPast).length})` }].map((opt) => (
+                  <button
+                    key={String(opt.key)}
+                    onClick={() => setShowArchivedJobs(opt.key)}
+                    className="text-[10px] uppercase tracking-wide px-2.5 py-1.5 rounded border"
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      color: showArchivedJobs === opt.key ? "#FFFFFF" : "#14171C",
+                      backgroundColor: showArchivedJobs === opt.key ? "#14171C" : "#F6F7F9",
+                      borderColor: showArchivedJobs === opt.key ? "#14171C" : "#E2E5EA",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-[10px] text-[#6B7280] mb-2">
+              A job archives automatically once its Event Date has passed — Due Date doesn't affect this. Jobs with no Event Date set stay in Active until you archive them manually by giving them one.
+            </p>
+            <div className="flex items-center justify-end gap-2 mb-2">
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] uppercase tracking-wide text-[#6B7280] mr-0.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                     Sort
@@ -2783,12 +2848,11 @@ export default function App() {
                 >
                   <PlusCircle size={13} /> Post Job
                 </button>
-              </div>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
               {STAGES.map((stage) => {
                 const stageJobs = jobs
-                  .filter((j) => j.stage === stage.key)
+                  .filter((j) => j.stage === stage.key && isJobPast(j) === showArchivedJobs)
                   .slice()
                   .sort((a, b) => (jobSortBy === "title" ? a.title.localeCompare(b.title) : (a.due || "").localeCompare(b.due || "")));
                 return (
@@ -2816,6 +2880,7 @@ export default function App() {
                           onRequireSignIn={requireSignIn}
                           streams={streams}
                           onJumpToEvent={jumpToEvent}
+                          roster={roster}
                         />
                       ))}
                       {stageJobs.length === 0 && (
@@ -2833,6 +2898,28 @@ export default function App() {
 
         {tab === "links" && (
           <LinksView links={links} onAdd={addLink} onDelete={deleteLink} studentIdentity={effectiveIdentity} onRequireSignIn={requireSignIn} />
+        )}
+
+        {tab === "admin" && accessLevel === "admin" && (
+          <AdminPanel
+            key={pendingEditId || "admin-panel"}
+            streams={streams}
+            onAdd={addStream}
+            onUpdate={updateStream}
+            onDelete={deleteStream}
+            passcodes={passcodes}
+            onUpdatePasscodes={setPasscodes}
+            roster={roster}
+            onAddRosterEntry={addRosterEntry}
+            onAddRosterEntries={addRosterEntries}
+            onDeleteRosterEntry={deleteRosterEntry}
+            reminderHours={reminderHours}
+            onUpdateReminderHours={setReminderHours}
+            adminName={adminName}
+            onUpdateAdminName={setAdminName}
+            initialEditId={pendingEditId}
+            onConsumedInitialEdit={() => setPendingEditId(null)}
+          />
         )}
       </div>
 
@@ -2896,7 +2983,7 @@ export default function App() {
         className="sm:hidden fixed bottom-0 left-0 right-0 z-40 flex border-t"
         style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFFf7", backdropFilter: "blur(6px)", paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {TABS.map(({ key, shortLabel, icon: Icon }) => {
+        {visibleTabs.map(({ key, shortLabel, icon: Icon }) => {
           const active = tab === key;
           return (
             <button
@@ -2915,29 +3002,6 @@ export default function App() {
           );
         })}
       </div>
-
-      {showAdmin && accessLevel === "admin" && (
-        <AdminPanel
-          key={pendingEditId || "admin-panel"}
-          streams={streams}
-          onAdd={addStream}
-          onUpdate={updateStream}
-          onDelete={deleteStream}
-          onClose={() => setShowAdmin(false)}
-          passcodes={passcodes}
-          onUpdatePasscodes={setPasscodes}
-          roster={roster}
-          onAddRosterEntry={addRosterEntry}
-          onAddRosterEntries={addRosterEntries}
-          onDeleteRosterEntry={deleteRosterEntry}
-          reminderHours={reminderHours}
-          onUpdateReminderHours={setReminderHours}
-          adminName={adminName}
-          onUpdateAdminName={setAdminName}
-          initialEditId={pendingEditId}
-          onConsumedInitialEdit={() => setPendingEditId(null)}
-        />
-      )}
 
       {showSignIn && (
         <StudentSignInModal
