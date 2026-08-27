@@ -9,7 +9,7 @@ import {
 import { db } from "./firebase";
 import {
   collection, doc, getDoc, getDocs, onSnapshot,
-  setDoc, updateDoc, deleteDoc, writeBatch, arrayUnion, runTransaction,
+  setDoc, updateDoc, deleteDoc, writeBatch, arrayUnion, runTransaction, FieldPath,
 } from "firebase/firestore";
 
 /* ---------------------------------------------------------
@@ -235,6 +235,7 @@ const initialLinks = [
 ];
 
 const initialRoster = [];
+const initialAdmins = [{ id: "ad1", name: "Matthew Vernatti", pin: "4759" }];
 
 function TallyDot({ color, pulse, label }) {
   return (
@@ -1397,6 +1398,7 @@ function buildEditForm(s) {
 function AdminPanel({
   streams, onAdd, onUpdate, onDelete, passcodes, onUpdatePasscodes,
   roster, onAddRosterEntry, onAddRosterEntries, onDeleteRosterEntry,
+  admins, onAddAdmin, onDeleteAdmin,
   reminderHours, onUpdateReminderHours, adminName, onUpdateAdminName,
   initialEditId, onConsumedInitialEdit,
 }) {
@@ -1421,6 +1423,8 @@ function AdminPanel({
   const [adminNameSaved, setAdminNameSaved] = useState(false);
   const [studentName, setStudentName] = useState("");
   const [studentEmail, setStudentEmail] = useState("");
+  const [adminAddName, setAdminAddName] = useState("");
+  const [adminAddPin, setAdminAddPin] = useState("");
   const [rosterUploadSummary, setRosterUploadSummary] = useState(null);
   const [reminderInput, setReminderInput] = useState(String(reminderHours));
   const [reminderSaved, setReminderSaved] = useState(false);
@@ -1449,6 +1453,16 @@ function AdminPanel({
   };
 
   const regeneratePin = (r) => onAddRosterEntry({ ...r, pin: genPin() });
+
+  const addAdminEntry = () => {
+    if (!adminAddName.trim()) return;
+    const pin = adminAddPin.trim() || genPin();
+    onAddAdmin({ id: "ad" + Date.now(), name: adminAddName.trim(), pin });
+    setAdminAddName("");
+    setAdminAddPin("");
+  };
+
+  const regenerateAdminPin = (a) => onAddAdmin({ ...a, pin: genPin() });
 
   const downloadRosterTemplate = () => {
     const csv = ["name,email,pin", "Mia Fields,mia.fields@example.com,1234", "Josh Turner,josh.turner@example.com,"].join("\n");
@@ -1716,6 +1730,7 @@ function AdminPanel({
           {[
             { key: "schedule", label: "Schedule" },
             { key: "roster", label: `Roster (${roster.length})` },
+            { key: "admins", label: `Admins (${admins.length})` },
             { key: "reminders", label: "Reminders" },
             { key: "security", label: "Security" },
           ].map((t) => (
@@ -2176,6 +2191,63 @@ function AdminPanel({
           </>
           )}
 
+          {adminTab === "admins" && (
+          <>
+          {/* Admins */}
+          <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280] flex items-center gap-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+              <CheckCircle2 size={12} /> Admin Logins ({admins.length})
+            </div>
+            <p className="text-[11px] text-[#6B7280]">
+              Anyone with one of these PINs signs in as an admin directly under their own name — no separate sign-in step, no PIN-sharing, and their actions (postings, assignments, evaluations) are attributed to them personally instead of a generic name. This is separate from the shared Admin Code below, which still works too.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={adminAddName} onChange={(e) => setAdminAddName(e.target.value)} placeholder="Name"
+                className="bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
+                style={{ borderColor: "#E2E5EA" }}
+              />
+              <input
+                value={adminAddPin} onChange={(e) => setAdminAddPin(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="4-digit PIN (blank = random)"
+                className="bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
+                style={{ borderColor: "#E2E5EA" }}
+              />
+            </div>
+            <button
+              onClick={addAdminEntry}
+              className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
+              style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              Add Admin
+            </button>
+
+            {admins.length > 0 && (
+              <div className="space-y-1.5 pt-1 max-h-56 overflow-y-auto">
+                {admins.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-2 rounded border px-3 py-1.5" style={{ borderColor: "#E2E5EA" }}>
+                    <span className="text-sm text-[#14171C]">{a.name}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span
+                        className="text-xs px-2 py-1 rounded"
+                        style={{ backgroundColor: "#EEF1F4", color: "#14171C", fontFamily: "'IBM Plex Mono', monospace" }}
+                        title="Admin sign-in PIN"
+                      >
+                        {a.pin || "----"}
+                      </span>
+                      <button onClick={() => regenerateAdminPin(a)} title="Generate a new PIN" className="text-[#6B7280] hover:text-[#1D6FBD]"><KeyRound size={13} /></button>
+                      <button
+                        onClick={() => { if (admins.length <= 1) { window.alert("You need at least one admin PIN — add a new one before removing this one."); return; } if (window.confirm(`Remove ${a.name} as an admin? They'll no longer be able to sign in with this PIN.`)) onDeleteAdmin(a.id); }}
+                        className="text-[#6B7280] hover:text-[#C42B22]"
+                      ><Trash2 size={13} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          </>
+          )}
+
           {adminTab === "reminders" && (
           <>
           {/* Reminders */}
@@ -2296,13 +2368,15 @@ function AdminPanel({
   );
 }
 
-function PasscodeGate({ passcodes, onUnlock }) {
+function PasscodeGate({ passcodes, admins = [], onUnlock }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState(false);
 
   const submit = () => {
     const v = value.trim();
     if (!v) return;
+    const adminMatch = admins.find((a) => a.pin && a.pin === v);
+    if (adminMatch) { onUnlock("admin", { id: adminMatch.id, name: adminMatch.name, email: "" }); return; }
     if (v.toLowerCase() === passcodes.admin.toLowerCase()) { onUnlock("admin"); return; }
     if (v.toLowerCase() === passcodes.student.toLowerCase()) { onUnlock("student"); return; }
     setError(true);
@@ -2419,6 +2493,7 @@ export default function App() {
   const [jobs, setJobs] = useState([]);
   const [links, setLinks] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [admins, setAdmins] = useState([]);
   const [dataReady, setDataReady] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [showAddJob, setShowAddJob] = useState(false);
@@ -2470,6 +2545,12 @@ export default function App() {
         initialLinks.forEach((l) => batch.set(doc(db, "links", l.id), l));
         await batch.commit();
       }
+      const adminsSnap = await getDocs(collection(db, "admins"));
+      if (adminsSnap.empty) {
+        const batch = writeBatch(db);
+        initialAdmins.forEach((a) => batch.set(doc(db, "admins", a.id), a));
+        await batch.commit();
+      }
       const settingsSnap = await getDoc(doc(db, "settings", "app"));
       if (!settingsSnap.exists()) {
         await setDoc(doc(db, "settings", "app"), {
@@ -2490,6 +2571,7 @@ export default function App() {
       onSnapshot(collection(db, "jobs"), (snap) => setJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "links"), (snap) => setLinks(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "roster"), (snap) => setRoster(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "admins"), (snap) => setAdmins(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(doc(db, "settings", "app"), (d) => {
         if (!d.exists()) return;
         const data = d.data();
@@ -2523,7 +2605,16 @@ export default function App() {
   }
 
   if (!accessLevel) {
-    return <PasscodeGate passcodes={passcodes} onUnlock={setAccessLevel} />;
+    return (
+      <PasscodeGate
+        passcodes={passcodes}
+        admins={admins}
+        onUnlock={(level, identity) => {
+          setAccessLevel(level);
+          if (identity) setStudentIdentity(identity);
+        }}
+      />
+    );
   }
 
   const boardStreams = streams.filter((s) => s.includeInBoard);
@@ -2558,7 +2649,7 @@ export default function App() {
         const current = Array.isArray(raw) ? raw : (raw && raw.name ? [raw] : []);
         const slots = (data.roleSlots && data.roleSlots[role]) || 1;
         if (current.length >= slots || current.some((p) => p.name === name)) return;
-        tx.update(ref, { [`roles.${role}`]: [...current, { name, email }] });
+        tx.update(ref, new FieldPath("roles", role), [...current, { name, email }]);
       });
     } catch (err) {
       console.error("claimRole failed:", err);
@@ -2569,7 +2660,7 @@ export default function App() {
     const stream = streams.find((s) => s.id === streamId);
     if (!stream) return;
     const current = getRoleFills(stream, role).filter((p) => p.name !== name);
-    updateDoc(doc(db, "streams", streamId), { [`roles.${role}`]: current });
+    updateDoc(doc(db, "streams", streamId), new FieldPath("roles", role), current);
   };
 
   const submitEval = (streamId, ev) =>
@@ -2599,6 +2690,9 @@ export default function App() {
     await batch.commit();
   };
   const deleteRosterEntry = (id) => deleteDoc(doc(db, "roster", id));
+
+  const addAdmin = (entry) => setDoc(doc(db, "admins", entry.id), entry);
+  const deleteAdmin = (id) => deleteDoc(doc(db, "admins", id));
 
   const moveJob = (id, dir) => {
     const job = jobs.find((j) => j.id === id);
@@ -2953,6 +3047,9 @@ export default function App() {
             onAddRosterEntry={addRosterEntry}
             onAddRosterEntries={addRosterEntries}
             onDeleteRosterEntry={deleteRosterEntry}
+            admins={admins}
+            onAddAdmin={addAdmin}
+            onDeleteAdmin={deleteAdmin}
             reminderHours={reminderHours}
             onUpdateReminderHours={setReminderHours}
             adminName={adminName}
