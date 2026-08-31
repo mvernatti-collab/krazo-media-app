@@ -4,7 +4,7 @@ import {
   Radio, Video, Mic, Camera, Users, Clapperboard, CheckCircle2, Circle,
   PlusCircle, X, ChevronLeft, ChevronRight, Upload, Star, Calendar,
   Trash2, Link2, FileVideo, Image as ImageIcon, FileText, Megaphone,
-  Settings, ExternalLink, Pencil, ListChecks, Download, Lock, LogOut, KeyRound
+  Settings, ExternalLink, Pencil, ListChecks, Download, Lock, LogOut, KeyRound, Archive
 } from "lucide-react";
 import { db } from "./firebase";
 import {
@@ -116,6 +116,28 @@ function isJobPast(job) {
   const today = new Date();
   const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   return eventDate.getTime() < todayMidnight.getTime();
+}
+function isJobArchived(job) {
+  return job.archived === true || isJobPast(job);
+}
+// Converts "Sep 4" -> "2026-09-04" for use as a native <input type="date"> value.
+// Returns "" if the string doesn't cleanly parse (e.g. an old free-typed date
+// that doesn't match the expected format) so the picker just shows unset.
+function toDateInputValue(mmmD) {
+  if (!mmmD) return "";
+  const parts = mmmD.trim().split(" ");
+  const idx = MONTHS.indexOf(parts[0]);
+  const day = parseInt(parts[1], 10);
+  if (idx === -1 || isNaN(day)) return "";
+  return `${SEASON_YEAR}-${String(idx + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+// Converts a native date-input value "2026-09-04" back to "Sep 4" for storage,
+// so the rest of the app (sorting, archiving) keeps working with one consistent format.
+function fromDateInputValue(iso) {
+  if (!iso) return "";
+  const [, m, d] = iso.split("-").map(Number);
+  if (!m || !d) return "";
+  return `${MONTHS[m - 1]} ${d}`;
 }
 function parseBool(val, fallback) {
   if (val === undefined || val === null || String(val).trim() === "") return fallback;
@@ -572,6 +594,7 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
   const canKick = (name) => accessLevel === "admin" || (studentIdentity && studentIdentity.name === name);
   const canEdit = accessLevel === "admin" || (studentIdentity && job.createdBy === studentIdentity.name);
   const linkedStream = job.linkedStreamId ? streams.find((s) => s.id === job.linkedStreamId) : null;
+  const jobLinks = Array.isArray(job.links) ? job.links : (job.link ? [job.link] : []);
 
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(job.title);
@@ -579,7 +602,15 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
   const [editDue, setEditDue] = useState(job.due);
   const [editEventDate, setEditEventDate] = useState(job.eventDate || "");
   const [editLinkedStreamId, setEditLinkedStreamId] = useState(job.linkedStreamId || "");
-  const [editingLink, setEditingLink] = useState(false);
+  const [newLinkInput, setNewLinkInput] = useState("");
+
+  const addLink = () => {
+    const v = newLinkInput.trim();
+    if (!v) return;
+    onLinkChange(job.id, [...jobLinks, v]);
+    setNewLinkInput("");
+  };
+  const removeLinkAt = (i) => onLinkChange(job.id, jobLinks.filter((_, idx) => idx !== i));
 
   const pickUp = () => {
     if (!studentIdentity) { onRequireSignIn(); return; }
@@ -617,7 +648,9 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
           <label className="flex-1">
             <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Event Date</span>
             <input
-              value={editEventDate} onChange={(e) => setEditEventDate(e.target.value)} placeholder="Event date"
+              type="date"
+              value={toDateInputValue(editEventDate)}
+              onChange={(e) => setEditEventDate(fromDateInputValue(e.target.value))}
               className="w-full bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
               style={{ borderColor: "#E2E5EA" }}
             />
@@ -625,7 +658,9 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
           <label className="flex-1">
             <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Due Date</span>
             <input
-              value={editDue} onChange={(e) => setEditDue(e.target.value)} placeholder="Due date"
+              type="date"
+              value={toDateInputValue(editDue)}
+              onChange={(e) => setEditDue(fromDateInputValue(e.target.value))}
               className="w-full bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
               style={{ borderColor: "#E2E5EA" }}
             />
@@ -679,6 +714,15 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          {canEdit && (
+            <button
+              onClick={() => onEditJob(job.id, { archived: !job.archived })}
+              title={job.archived ? "Unarchive" : "Archive"}
+              className="text-[#14171C] hover:text-[#1D6FBD]"
+            >
+              <Archive size={13} />
+            </button>
+          )}
           {canEdit && (
             <button onClick={() => setEditing(true)} className="text-[#14171C] hover:text-[#1D6FBD]">
               <Pencil size={13} />
@@ -746,35 +790,36 @@ function JobCard({ job, onMove, onDelete, onLinkChange, onPickUp, onKick, onEdit
       </div>
 
       {showLoad && (
-        <div className="flex items-center gap-1.5 pt-1">
-          <Link2 size={12} className="text-[#14171C] shrink-0" />
-          {job.link && !editingLink ? (
-            <>
+        <div className="space-y-1 pt-1">
+          {jobLinks.map((url, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <Link2 size={12} className="text-[#14171C] shrink-0" />
               <a
-                href={/^https?:\/\//i.test(job.link) ? job.link : `https://${job.link}`}
+                href={/^https?:\/\//i.test(url) ? url : `https://${url}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 min-w-0 truncate text-[11px] text-[#1D6FBD] underline"
                 style={{ fontFamily: "'IBM Plex Mono', monospace" }}
               >
-                {job.link}
+                {url}
               </a>
-              <button onClick={() => setEditingLink(true)} className="text-[#6B7280] hover:text-[#1D6FBD] shrink-0">
-                <Pencil size={11} />
+              <button onClick={() => removeLinkAt(i)} className="text-[#6B7280] hover:text-[#E8362E] shrink-0">
+                <X size={11} />
               </button>
-            </>
-          ) : (
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <Link2 size={12} className="text-[#6B7280] shrink-0" />
             <input
-              autoFocus={editingLink}
-              value={job.link}
-              onChange={(e) => onLinkChange(job.id, e.target.value)}
-              onBlur={() => setEditingLink(false)}
-              onKeyDown={(e) => e.key === "Enter" && setEditingLink(false)}
-              placeholder="Paste upload / drive link..."
+              value={newLinkInput}
+              onChange={(e) => setNewLinkInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addLink()}
+              onBlur={addLink}
+              placeholder={jobLinks.length === 0 ? "Paste upload / drive link, press Enter..." : "Add another link, press Enter..."}
               className="w-full bg-transparent border-b text-[11px] text-[#1D6FBD] placeholder-[#6B7280] outline-none pb-0.5"
               style={{ borderColor: "#E2E5EA", fontFamily: "'IBM Plex Mono', monospace" }}
             />
-          )}
+          </div>
         </div>
       )}
 
@@ -815,7 +860,7 @@ function AddJobModal({ onClose, onAdd, studentIdentity, streams = [] }) {
     if (!title.trim() || !studentIdentity) return;
     onAdd({
       id: "j" + Date.now(), title: title.trim(), type, stage: "requested",
-      assignees: [], due: due || "TBD", eventDate: eventDate.trim(), link: "",
+      assignees: [], due: due || "TBD", eventDate: eventDate.trim(), links: [],
       linkedStreamId, createdBy: studentIdentity.name,
     });
     onClose();
@@ -861,16 +906,28 @@ function AddJobModal({ onClose, onAdd, studentIdentity, streams = [] }) {
             {streams.map((s) => <option key={s.id} value={s.id}>{s.title} {s.opponent} — {s.date}</option>)}
           </select>
         )}
-        <input
-          value={eventDate} onChange={(e) => setEventDate(e.target.value)} placeholder="Event date (optional, e.g. Sep 4)"
-          className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
-          style={{ borderColor: "#E2E5EA" }}
-        />
-        <input
-          value={due} onChange={(e) => setDue(e.target.value)} placeholder="Due date (e.g. Aug 20)"
-          className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
-          style={{ borderColor: "#E2E5EA" }}
-        />
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+            Event Date (optional — needed for auto-archive to work)
+          </span>
+          <input
+            type="date"
+            value={toDateInputValue(eventDate)}
+            onChange={(e) => setEventDate(fromDateInputValue(e.target.value))}
+            className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none mt-1"
+            style={{ borderColor: "#E2E5EA" }}
+          />
+        </label>
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Due Date</span>
+          <input
+            type="date"
+            value={toDateInputValue(due)}
+            onChange={(e) => setDue(fromDateInputValue(e.target.value))}
+            className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none mt-1"
+            style={{ borderColor: "#E2E5EA" }}
+          />
+        </label>
         <button
           onClick={submit}
           disabled={!studentIdentity}
@@ -907,7 +964,7 @@ function BulkJobImportModal({ onClose, onBulkAdd, studentIdentity }) {
         id: "j" + Date.now() + Math.random().toString(36).slice(2, 7),
         title: r.title.trim(), type: r.type, stage: "requested",
         assignees: [], due: r.due.trim() || "TBD", eventDate: r.eventDate.trim() || "",
-        link: "", linkedStreamId: "",
+        links: [], linkedStreamId: "",
         createdBy: studentIdentity.name,
       }));
     onBulkAdd(jobs);
@@ -994,9 +1051,9 @@ function BulkJobImportModal({ onClose, onBulkAdd, studentIdentity }) {
                     <label className="flex-1">
                       <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Event Date</span>
                       <input
-                        value={row.eventDate}
-                        onChange={(e) => updateRow(i, { eventDate: e.target.value })}
-                        placeholder="Event date"
+                        type="date"
+                        value={toDateInputValue(row.eventDate)}
+                        onChange={(e) => updateRow(i, { eventDate: fromDateInputValue(e.target.value) })}
                         className="w-full bg-[#EEF1F4] border rounded px-2 py-1 text-[11px] text-[#14171C] outline-none"
                         style={{ borderColor: "#E2E5EA" }}
                       />
@@ -1004,9 +1061,9 @@ function BulkJobImportModal({ onClose, onBulkAdd, studentIdentity }) {
                     <label className="flex-1">
                       <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Due (Graphic)</span>
                       <input
-                        value={row.due}
-                        onChange={(e) => updateRow(i, { due: e.target.value })}
-                        placeholder="Due date"
+                        type="date"
+                        value={toDateInputValue(row.due)}
+                        onChange={(e) => updateRow(i, { due: fromDateInputValue(e.target.value) })}
                         className="w-full bg-[#EEF1F4] border rounded px-2 py-1 text-[11px] text-[#14171C] outline-none"
                         style={{ borderColor: "#E2E5EA" }}
                       />
@@ -1404,6 +1461,8 @@ function AdminPanel({
 }) {
   const [adminTab, setAdminTab] = useState("schedule");
   const [scheduleSortBy, setScheduleSortBy] = useState("date"); // 'date' | 'type' | 'sport'
+  const [dismissedCategoryFix, setDismissedCategoryFix] = useState(false);
+  const [dismissedPositionsFix, setDismissedPositionsFix] = useState(false);
   const [editingId, setEditingId] = useState(() => {
     if (!initialEditId) return null;
     return streams.some((s) => s.id === initialEditId) ? initialEditId : null;
@@ -1752,13 +1811,16 @@ function AdminPanel({
         <div className="p-4 space-y-4">
           {adminTab === "schedule" && (
             <>
-          {awayMarkedLivestream.length > 0 && (
+          {awayMarkedLivestream.length > 0 && !dismissedCategoryFix && (
             <div className="rounded border px-3 py-3 space-y-2" style={{ borderColor: "#14171C", backgroundColor: "#14171C11" }}>
-              <div className="text-[10px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                Quick Fix — Calendar Color
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                  Quick Fix — Calendar Color
+                </div>
+                <button onClick={() => setDismissedCategoryFix(true)} className="text-[#6B7280] hover:text-[#14171C]"><X size={14} /></button>
               </div>
               <p className="text-[11px] text-[#14171C]">
-                {awayMarkedLivestream.length} away game{awayMarkedLivestream.length === 1 ? " is" : "s are"} still marked Livestream, so they show up red on the Calendar even though they're not being broadcast. Switch them to Content Only so the calendar color actually matches reality — you can flip any individual one back to Livestream any time.
+                {awayMarkedLivestream.length} away game{awayMarkedLivestream.length === 1 ? " is" : "s are"} still marked Livestream, so they show up red on the Calendar even though they're not being broadcast. If you only cover a handful of these (like varsity football), it's totally fine to dismiss this and just fix those specific ones by hand — this button is only here in case you'd rather clean them all up at once.
               </p>
               <button
                 onClick={fixAwayCategory}
@@ -1770,13 +1832,16 @@ function AdminPanel({
             </div>
           )}
 
-          {awayWithOpenPositions.length > 0 && (
+          {awayWithOpenPositions.length > 0 && !dismissedPositionsFix && (
             <div className="rounded border px-3 py-3 space-y-2" style={{ borderColor: "#ED1C24", backgroundColor: "#ED1C2411" }}>
-              <div className="text-[10px] uppercase tracking-[0.15em] text-[#ED1C24]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                Quick Fix — Positions
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-[0.15em] text-[#ED1C24]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                  Quick Fix — Positions
+                </div>
+                <button onClick={() => setDismissedPositionsFix(true)} className="text-[#6B7280] hover:text-[#ED1C24]"><X size={14} /></button>
               </div>
               <p className="text-[11px] text-[#14171C]">
-                {awayWithOpenPositions.length} away game{awayWithOpenPositions.length === 1 ? " has" : "s have"} open crew positions students can sign up for, even though nothing's actually being covered. Clear them to zero — sign-up stays available on each, you'll just need to manually open the specific positions you actually want covered.
+                {awayWithOpenPositions.length} away game{awayWithOpenPositions.length === 1 ? " has" : "s have"} open crew positions students can sign up for, even though nothing's actually being covered. This is entirely optional — dismiss it if you're only actively managing a few events (like varsity football) and don't need to bulk-clean the rest.
               </p>
               <button
                 onClick={fixAwayBroadcasts}
@@ -2703,7 +2768,7 @@ export default function App() {
   };
 
   const deleteJob = (id) => deleteDoc(doc(db, "jobs", id));
-  const linkChange = (id, link) => updateDoc(doc(db, "jobs", id), { link });
+  const linkChange = (id, links) => updateDoc(doc(db, "jobs", id), { links, link: "" });
   const addJob = (job) => setDoc(doc(db, "jobs", job.id), job);
   const editJob = (id, patch) => updateDoc(doc(db, "jobs", id), patch);
   const bulkAddJobs = async (newJobs) => {
@@ -2928,7 +2993,7 @@ export default function App() {
                 Production Pipeline
               </h2>
               <div className="flex items-center gap-1.5">
-                {[{ key: false, label: `Active (${jobs.filter((j) => !isJobPast(j)).length})` }, { key: true, label: `Archived (${jobs.filter(isJobPast).length})` }].map((opt) => (
+                {[{ key: false, label: `Active (${jobs.filter((j) => !isJobArchived(j)).length})` }, { key: true, label: `Archived (${jobs.filter(isJobArchived).length})` }].map((opt) => (
                   <button
                     key={String(opt.key)}
                     onClick={() => setShowArchivedJobs(opt.key)}
@@ -2946,7 +3011,7 @@ export default function App() {
               </div>
             </div>
             <p className="text-[10px] text-[#6B7280] mb-2">
-              A job archives automatically once its Event Date has passed — Due Date doesn't affect this. Jobs with no Event Date set stay in Active until you archive them manually by giving them one.
+              A job archives automatically once its Event Date has passed, or you can archive it manually anytime with the archive button on the card — handy for jobs with no Event Date set, like ones without a specific game tied to them.
             </p>
             <div className="flex items-center justify-end gap-2 mb-2">
                 <div className="flex items-center gap-1">
@@ -2987,7 +3052,7 @@ export default function App() {
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
               {STAGES.map((stage) => {
                 const stageJobs = jobs
-                  .filter((j) => j.stage === stage.key && isJobPast(j) === showArchivedJobs)
+                  .filter((j) => j.stage === stage.key && isJobArchived(j) === showArchivedJobs)
                   .slice()
                   .sort((a, b) => (jobSortBy === "title" ? a.title.localeCompare(b.title) : (a.due || "").localeCompare(b.due || "")));
                 return (
@@ -2999,7 +3064,7 @@ export default function App() {
                       </span>
                       <span className="text-[11px] text-[#14171C] opacity-60">({stageJobs.length})</span>
                     </div>
-                    <div className="space-y-2 min-h-[60px]">
+                    <div className="space-y-2 min-h-[60px] max-h-[65vh] overflow-y-auto pr-1">
                       {stageJobs.map((job) => (
                         <JobCard
                           key={job.id}
