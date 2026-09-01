@@ -1331,11 +1331,149 @@ function CalendarView({ streams, onSelectStream, onEditStream, accessLevel }) {
   );
 }
 
-function LinksView({ links, onAdd, onDelete, studentIdentity, onRequireSignIn }) {
+const AUDIENCE_LABELS = { all: "Everyone", krazo: "Krazo Only", dm: "Digital Media Only" };
+
+function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onClearForNewWeek, onJumpToEvent, onJumpToJob, studentIdentity }) {
+  const [text, setText] = useState("");
+  const [linkedStreamId, setLinkedStreamId] = useState("");
+  const [linkedJobId, setLinkedJobId] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+
+  const submit = () => {
+    if (!text.trim()) return;
+    onAdd({
+      id: "fi" + Date.now(), text: text.trim(), linkedStreamId, linkedJobId,
+      done: false, archived: false, createdBy: studentIdentity ? studentIdentity.name : "Producer",
+    });
+    setText(""); setLinkedStreamId(""); setLinkedJobId("");
+  };
+
+  const visible = items.filter((i) => !!i.archived === showArchived);
+  const activeCount = items.filter((i) => !i.archived).length;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-y-2">
+        <h2 className="text-[11px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+          Weekly Focus
+        </h2>
+        <div className="flex items-center gap-1.5">
+          {[{ key: false, label: `Active (${items.filter((i) => !i.archived).length})` }, { key: true, label: `Archived (${items.filter((i) => i.archived).length})` }].map((opt) => (
+            <button
+              key={String(opt.key)}
+              onClick={() => setShowArchived(opt.key)}
+              className="text-[10px] uppercase tracking-wide px-2.5 py-1.5 rounded border"
+              style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                color: showArchived === opt.key ? "#FFFFFF" : "#14171C",
+                backgroundColor: showArchived === opt.key ? "#14171C" : "#F6F7F9",
+                borderColor: showArchived === opt.key ? "#14171C" : "#E2E5EA",
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-md border px-3 py-3 space-y-2 mb-4" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+        <input
+          value={text} onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="Something to bring up or keep an eye on..."
+          className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
+          style={{ borderColor: "#E2E5EA" }}
+        />
+        <div className="flex gap-2">
+          <select
+            value={linkedStreamId} onChange={(e) => setLinkedStreamId(e.target.value)}
+            className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+            style={{ borderColor: "#E2E5EA" }}
+          >
+            <option value="">Link to event (optional)</option>
+            {streams.map((s) => <option key={s.id} value={s.id}>{s.title} {s.opponent} — {s.date}</option>)}
+          </select>
+          <select
+            value={linkedJobId} onChange={(e) => setLinkedJobId(e.target.value)}
+            className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+            style={{ borderColor: "#E2E5EA" }}
+          >
+            <option value="">Link to job (optional)</option>
+            {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
+          </select>
+        </div>
+        <button
+          onClick={submit}
+          className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
+          style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+        >
+          Add to Focus List
+        </button>
+      </div>
+
+      {!showArchived && activeCount > 0 && (
+        <button
+          onClick={() => { if (window.confirm("Clear all active focus items for a new week? They'll move to Archived, not delete.")) onClearForNewWeek(); }}
+          className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border mb-3"
+          style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
+        >
+          Clear for New Week
+        </button>
+      )}
+
+      <div className="space-y-2">
+        {visible.map((item) => {
+          const linkedStream = item.linkedStreamId ? streams.find((s) => s.id === item.linkedStreamId) : null;
+          const linkedJob = item.linkedJobId ? jobs.find((j) => j.id === item.linkedJobId) : null;
+          return (
+            <div key={item.id} className="rounded-md border px-3 py-2.5 flex items-start gap-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+              <button onClick={() => onToggleDone(item.id, !item.done)} className="mt-0.5 shrink-0">
+                <CheckCircle2 size={16} color={item.done ? "#178A5E" : "#6B7280"} fill={item.done ? "#178A5E22" : "none"} />
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-[#14171C]" style={item.done ? { textDecoration: "line-through", color: "#6B7280" } : {}}>
+                  {item.text}
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {linkedStream && (
+                    <button onClick={() => onJumpToEvent(linkedStream.id)} className="text-[10px] flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ backgroundColor: "#1D6FBD22", color: "#1D6FBD", fontFamily: "'IBM Plex Mono', monospace" }}>
+                      <Calendar size={9} /> {linkedStream.title} {linkedStream.opponent}
+                    </button>
+                  )}
+                  {linkedJob && (
+                    <button onClick={() => onJumpToJob()} className="text-[10px] flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ backgroundColor: "#E8362E22", color: "#E8362E", fontFamily: "'IBM Plex Mono', monospace" }}>
+                      <Clapperboard size={9} /> {linkedJob.title}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => onDelete(item.id)} className="text-[#6B7280] hover:text-[#C42B22] shrink-0">
+                <Trash2 size={13} />
+              </button>
+            </div>
+          );
+        })}
+        {visible.length === 0 && (
+          <div className="rounded border border-dashed px-3 py-6 text-center text-xs text-[#6B7280]" style={{ borderColor: "#E2E5EA" }}>
+            {showArchived ? "No archived items." : "Nothing on the focus list yet."}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LinksView({ links, onAdd, onEdit, onDelete, studentIdentity, onRequireSignIn, accessLevel, viewerAudience }) {
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
+  const [audience, setAudience] = useState("all");
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [editAudience, setEditAudience] = useState("all");
 
   const openForm = () => {
     if (!studentIdentity) { onRequireSignIn(); return; }
@@ -1345,9 +1483,31 @@ function LinksView({ links, onAdd, onDelete, studentIdentity, onRequireSignIn })
   const submit = () => {
     if (!title.trim() || !url.trim() || !studentIdentity) return;
     const fullUrl = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
-    onAdd({ id: "l" + Date.now(), title: title.trim(), url: fullUrl, note: note.trim(), createdBy: studentIdentity.name });
-    setTitle(""); setUrl(""); setNote(""); setShowForm(false);
+    onAdd({ id: "l" + Date.now(), title: title.trim(), url: fullUrl, note: note.trim(), audience, createdBy: studentIdentity.name });
+    setTitle(""); setUrl(""); setNote(""); setAudience("all"); setShowForm(false);
   };
+
+  const startEdit = (l) => {
+    setEditingId(l.id);
+    setEditTitle(l.title);
+    setEditUrl(l.url);
+    setEditNote(l.note || "");
+    setEditAudience(l.audience || "all");
+  };
+
+  const saveEdit = () => {
+    if (!editTitle.trim() || !editUrl.trim()) return;
+    const fullUrl = /^https?:\/\//i.test(editUrl.trim()) ? editUrl.trim() : `https://${editUrl.trim()}`;
+    onEdit(editingId, { title: editTitle.trim(), url: fullUrl, note: editNote.trim(), audience: editAudience });
+    setEditingId(null);
+  };
+
+  // Admins see and manage every link regardless of audience. Everyone else only
+  // sees links tagged for them (or "Everyone"), so Digital Media never sees
+  // Krazo-only links and vice versa.
+  const visibleLinks = accessLevel === "admin"
+    ? links
+    : links.filter((l) => (l.audience || "all") === "all" || (l.audience || "all") === viewerAudience);
 
   return (
     <div>
@@ -1382,6 +1542,13 @@ function LinksView({ links, onAdd, onDelete, studentIdentity, onRequireSignIn })
             className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
             style={{ borderColor: "#E2E5EA" }}
           />
+          <select
+            value={audience} onChange={(e) => setAudience(e.target.value)}
+            className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none"
+            style={{ borderColor: "#E2E5EA" }}
+          >
+            {Object.entries(AUDIENCE_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
           <button
             onClick={submit}
             className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
@@ -1393,16 +1560,37 @@ function LinksView({ links, onAdd, onDelete, studentIdentity, onRequireSignIn })
       )}
 
       <div className="space-y-2">
-        {links.map((l) => (
+        {visibleLinks.map((l) => (
+          editingId === l.id ? (
+            <div key={l.id} className="rounded-md border px-3 py-3 space-y-2" style={{ borderColor: "#1D6FBD", backgroundColor: "#F6F7F9" }}>
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none" style={{ borderColor: "#E2E5EA" }} />
+              <input value={editUrl} onChange={(e) => setEditUrl(e.target.value)} className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none" style={{ borderColor: "#E2E5EA" }} />
+              <input value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Short note (optional)" className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none" style={{ borderColor: "#E2E5EA" }} />
+              <select value={editAudience} onChange={(e) => setEditAudience(e.target.value)} className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none" style={{ borderColor: "#E2E5EA" }}>
+                {Object.entries(AUDIENCE_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+              </select>
+              <div className="flex gap-2">
+                <button onClick={saveEdit} className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded" style={{ backgroundColor: "#1D6FBD", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}>Save</button>
+                <button onClick={() => setEditingId(null)} className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border" style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
           <div
             key={l.id}
             className="rounded-md border px-4 py-3 flex items-center justify-between gap-3"
             style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}
           >
-            <a href={l.url} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 min-w-0 group">
+            <a href={l.url} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 min-w-0 group flex-1">
               <ExternalLink size={14} className="mt-0.5 shrink-0 text-[#1D6FBD]" />
               <div className="min-w-0">
-                <div className="text-sm font-medium text-[#14171C] group-hover:text-[#1D6FBD] truncate">{l.title}</div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-sm font-medium text-[#14171C] group-hover:text-[#1D6FBD] truncate">{l.title}</span>
+                  {accessLevel === "admin" && (l.audience || "all") !== "all" && (
+                    <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ backgroundColor: "#1D6FBD22", color: "#1D6FBD", fontFamily: "'IBM Plex Mono', monospace" }}>
+                      {AUDIENCE_LABELS[l.audience]}
+                    </span>
+                  )}
+                </div>
                 {l.note && <div className="text-xs text-[#6B7280] truncate">{l.note}</div>}
                 {l.createdBy && (
                   <div className="text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -1411,12 +1599,20 @@ function LinksView({ links, onAdd, onDelete, studentIdentity, onRequireSignIn })
                 )}
               </div>
             </a>
-            <button onClick={() => onDelete(l.id)} className="text-[#6B7280] hover:text-[#C42B22] shrink-0">
-              <Trash2 size={14} />
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {accessLevel === "admin" && (
+                <button onClick={() => startEdit(l)} className="text-[#6B7280] hover:text-[#1D6FBD]">
+                  <Pencil size={14} />
+                </button>
+              )}
+              <button onClick={() => onDelete(l.id)} className="text-[#6B7280] hover:text-[#C42B22]">
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
+          )
         ))}
-        {links.length === 0 && (
+        {visibleLinks.length === 0 && (
           <div className="rounded border border-dashed px-3 py-6 text-center text-xs text-[#6B7280]" style={{ borderColor: "#E2E5EA" }}>
             No links yet.
           </div>
@@ -2557,6 +2753,7 @@ export default function App() {
   const [streams, setStreams] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [links, setLinks] = useState([]);
+  const [focusItems, setFocusItems] = useState([]);
   const [roster, setRoster] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [dataReady, setDataReady] = useState(false);
@@ -2637,6 +2834,7 @@ export default function App() {
       onSnapshot(collection(db, "links"), (snap) => setLinks(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "roster"), (snap) => setRoster(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "admins"), (snap) => setAdmins(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "focusItems"), (snap) => setFocusItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(doc(db, "settings", "app"), (d) => {
         if (!d.exists()) return;
         const data = d.data();
@@ -2746,6 +2944,16 @@ export default function App() {
   const deleteStream = (id) => deleteDoc(doc(db, "streams", id));
 
   const addLink = (link) => setDoc(doc(db, "links", link.id), link);
+  const editLink = (id, patch) => updateDoc(doc(db, "links", id), patch);
+
+  const addFocusItem = (item) => setDoc(doc(db, "focusItems", item.id), item);
+  const toggleFocusDone = (id, done) => updateDoc(doc(db, "focusItems", id), { done });
+  const deleteFocusItem = (id) => deleteDoc(doc(db, "focusItems", id));
+  const clearFocusForNewWeek = async () => {
+    const batch = writeBatch(db);
+    focusItems.filter((i) => !i.archived).forEach((i) => batch.update(doc(db, "focusItems", i.id), { archived: true }));
+    await batch.commit();
+  };
   const deleteLink = (id) => deleteDoc(doc(db, "links", id));
 
   const addRosterEntry = (entry) => setDoc(doc(db, "roster", entry.id), entry);
@@ -2810,7 +3018,7 @@ export default function App() {
 
   const liveCount = streams.filter((s) => s.status === "live").length;
   const visibleTabs = accessLevel === "admin"
-    ? [...TABS, { key: "admin", label: "Admin", shortLabel: "Admin", icon: Settings }]
+    ? [...TABS, { key: "focus", label: "Focus", shortLabel: "Focus", icon: ListChecks }, { key: "admin", label: "Admin", shortLabel: "Admin", icon: Settings }]
     : TABS;
 
   return (
@@ -3097,7 +3305,22 @@ export default function App() {
         )}
 
         {tab === "links" && (
-          <LinksView links={links} onAdd={addLink} onDelete={deleteLink} studentIdentity={effectiveIdentity} onRequireSignIn={requireSignIn} />
+          <LinksView links={links} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} studentIdentity={effectiveIdentity} onRequireSignIn={requireSignIn} accessLevel={accessLevel} viewerAudience="krazo" />
+        )}
+
+        {tab === "focus" && accessLevel === "admin" && (
+          <FocusBoard
+            items={focusItems}
+            streams={streams}
+            jobs={jobs}
+            onAdd={addFocusItem}
+            onToggleDone={toggleFocusDone}
+            onDelete={deleteFocusItem}
+            onClearForNewWeek={clearFocusForNewWeek}
+            onJumpToEvent={jumpToEvent}
+            onJumpToJob={jumpToJobBoard}
+            studentIdentity={effectiveIdentity}
+          />
         )}
 
         {tab === "admin" && accessLevel === "admin" && (
