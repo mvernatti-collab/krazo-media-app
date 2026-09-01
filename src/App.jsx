@@ -3297,7 +3297,7 @@ function DigitalMediaView({ identity, sections, weeks, links, onClaim, onRelease
   );
 }
 
-export default function App() {
+function AppInner() {
   const [accessLevel, setAccessLevel] = useState(null); // null | 'student' | 'admin'
   const [studentIdentity, setStudentIdentity] = useState(null); // null | {id, name, email}
   const [showSignIn, setShowSignIn] = useState(false);
@@ -4100,5 +4100,62 @@ export default function App() {
         />
       )}
     </div>
+  );
+}
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, info: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    this.setState({ info });
+    console.error(error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight: "100vh", padding: "24px 16px", backgroundColor: "#FFFFFF", fontFamily: "Inter, sans-serif" }}>
+          <div style={{ maxWidth: 640, margin: "0 auto" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#C42B22", marginBottom: 8 }}>
+              Something broke — here's exactly what happened
+            </h2>
+            <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 12 }}>
+              Screenshot or copy everything in the box below and send it over — no need to open DevTools, this is the full error.
+            </p>
+            <pre style={{
+              whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12, lineHeight: 1.5,
+              backgroundColor: "#F6F7F9", border: "1px solid #E2E5EA", borderRadius: 8,
+              padding: 14, color: "#14171C", fontFamily: "'IBM Plex Mono', monospace",
+            }}>
+              {String(this.state.error && (this.state.error.stack || this.state.error.message || this.state.error))}
+              {this.state.info && this.state.info.componentStack ? "\n\n--- component stack ---" + this.state.info.componentStack : ""}
+            </pre>
+            <button
+              onClick={() => this.setState({ error: null, info: null })}
+              style={{
+                marginTop: 14, padding: "8px 16px", backgroundColor: "#E8362E", color: "#FFFFFF",
+                border: "none", borderRadius: 6, fontSize: 12, textTransform: "uppercase",
+                letterSpacing: "0.05em", cursor: "pointer",
+              }}
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
   );
 }
