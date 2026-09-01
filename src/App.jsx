@@ -1648,10 +1648,409 @@ function buildEditForm(s) {
   };
 }
 
+function DigitalMediaAdmin({
+  sections, roster, weeks,
+  onAddSection, onDeleteSection,
+  onAddRosterEntry, onAddRosterEntries, onDeleteRosterEntry,
+  onPublishWeek, onUpdateWeek, onArchiveWeek, onDeleteWeek,
+  onClaimSlot, onReleaseSlot,
+}) {
+  const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [dmSubTab, setDmSubTab] = useState("sheet"); // 'sheet' | 'roster' | 'dashboard'
+  const [newSectionName, setNewSectionName] = useState("");
+  const [studentName, setStudentName] = useState("");
+  const [rosterUploadSummary, setRosterUploadSummary] = useState(null);
+  const rosterFileInputRef = useRef(null);
+
+  // --- weekly sheet builder state ---
+  const [mondayISO, setMondayISO] = useState(nextMondayISO);
+  const [quotaInput, setQuotaInput] = useState("2");
+  const [rawText, setRawText] = useState("");
+  const [parsedRows, setParsedRows] = useState(null);
+  const [newSlotTitle, setNewSlotTitle] = useState("");
+  const [newSlotDate, setNewSlotDate] = useState("");
+  const [newSlotCap, setNewSlotCap] = useState("2");
+
+  const sectionRoster = roster.filter((r) => r.sectionId === selectedSectionId);
+  const activeWeek = weeks.find((w) => w.sectionId === selectedSectionId && !w.archived);
+  const pastWeeks = weeks.filter((w) => w.sectionId === selectedSectionId && w.archived).sort((a, b) => (b.label || "").localeCompare(a.label || ""));
+
+  const addSection = () => {
+    if (!newSectionName.trim()) return;
+    onAddSection({ id: "dms" + Date.now(), name: newSectionName.trim() });
+    setNewSectionName("");
+  };
+
+  const addStudent = () => {
+    if (!studentName.trim() || !selectedSectionId) return;
+    onAddRosterEntry({ id: "dmst" + Date.now(), name: studentName.trim(), pin: genPin(), sectionId: selectedSectionId });
+    setStudentName("");
+  };
+  const regeneratePin = (r) => onAddRosterEntry({ ...r, pin: genPin() });
+
+  const downloadRosterTemplate = () => {
+    const csv = ["name,pin", "Mia Fields,1234", "Josh Turner,"].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "digital-media-roster-template.csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  const handleRosterCSVUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedSectionId) return;
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete: (results) => {
+        let added = 0, skipped = 0;
+        const entries = [];
+        results.data.forEach((row) => {
+          const name = (row.name || "").trim();
+          const pin = (row.pin || "").trim() || genPin();
+          if (!name) { skipped++; return; }
+          entries.push({ id: "dmst" + Date.now() + Math.random().toString(36).slice(2, 7), name, pin, sectionId: selectedSectionId });
+          added++;
+        });
+        onAddRosterEntries(entries);
+        setRosterUploadSummary({ added, skipped });
+        if (rosterFileInputRef.current) rosterFileInputRef.current.value = "";
+      },
+    });
+  };
+
+  const doParse = () => {
+    if (!rawText.trim()) return;
+    const rows = parseScheduleText(rawText, mondayISO).map((r) => ({ title: r.title, date: r.eventDate, cap: "2", include: true }));
+    setParsedRows(rows);
+  };
+  const updateParsedRow = (i, patch) => setParsedRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+
+  const publishWeek = () => {
+    if (!parsedRows || !selectedSectionId) return;
+    const slots = parsedRows
+      .filter((r) => r.include && r.title.trim())
+      .map((r) => ({
+        id: "slot" + Date.now() + Math.random().toString(36).slice(2, 6),
+        title: r.title.trim(), date: r.date, cap: Math.max(1, parseInt(r.cap, 10) || 1), signups: [],
+      }));
+    if (slots.length === 0) return;
+    onPublishWeek({
+      id: "dmw" + Date.now(), sectionId: selectedSectionId,
+      label: `Week of ${mondayISO}`, quota: Math.max(1, parseInt(quotaInput, 10) || 1),
+      archived: false, slots,
+    });
+    setParsedRows(null);
+    setRawText("");
+  };
+
+  const addManualSlot = () => {
+    if (!newSlotTitle.trim() || !activeWeek) return;
+    const slot = { id: "slot" + Date.now() + Math.random().toString(36).slice(2, 6), title: newSlotTitle.trim(), date: newSlotDate.trim(), cap: Math.max(1, parseInt(newSlotCap, 10) || 1), signups: [] };
+    onUpdateWeek(activeWeek.id, { slots: [...(activeWeek.slots || []), slot] });
+    setNewSlotTitle(""); setNewSlotDate(""); setNewSlotCap("2");
+  };
+  const removeSlot = (slotId) => {
+    if (!activeWeek) return;
+    onUpdateWeek(activeWeek.id, { slots: (activeWeek.slots || []).filter((s) => s.id !== slotId) });
+  };
+  const adjustCap = (slotId, delta) => {
+    if (!activeWeek) return;
+    onUpdateWeek(activeWeek.id, {
+      slots: (activeWeek.slots || []).map((s) => (s.id === slotId ? { ...s, cap: Math.max(1, s.cap + delta) } : s)),
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+        <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+          Sections ({sections.length})
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={newSectionName} onChange={(e) => setNewSectionName(e.target.value)} placeholder="e.g. 1st Hour"
+            className="flex-1 bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
+            style={{ borderColor: "#E2E5EA" }}
+          />
+          <button onClick={addSection} className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded" style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}>
+            Add Section
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {sections.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setSelectedSectionId(s.id)}
+              className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide px-2.5 py-1.5 rounded border"
+              style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                color: selectedSectionId === s.id ? "#FFFFFF" : "#14171C",
+                backgroundColor: selectedSectionId === s.id ? "#14171C" : "#FFFFFF",
+                borderColor: selectedSectionId === s.id ? "#14171C" : "#E2E5EA",
+              }}
+            >
+              {s.name}
+              <span
+                onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete section "${s.name}"? Its roster and sign-up sheets stay in the database but won't be reachable from here.`)) onDeleteSection(s.id); }}
+                className="hover:text-[#E8362E]"
+              ><X size={11} /></span>
+            </button>
+          ))}
+          {sections.length === 0 && <p className="text-xs text-[#6B7280]">No sections yet — add one above to get started.</p>}
+        </div>
+      </div>
+
+      {!selectedSectionId ? (
+        <p className="text-xs text-[#6B7280]">Pick a section above to manage its roster and weekly sign-up sheet.</p>
+      ) : (
+        <>
+          <div className="flex gap-1 border-b overflow-x-auto" style={{ borderColor: "#E2E5EA" }}>
+            {[
+              { key: "sheet", label: "Weekly Sheet" },
+              { key: "roster", label: `Roster (${sectionRoster.length})` },
+              { key: "dashboard", label: "Dashboard" },
+            ].map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setDmSubTab(t.key)}
+                className="text-[10px] uppercase tracking-wide font-medium px-3 py-2 rounded-t whitespace-nowrap"
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  color: dmSubTab === t.key ? "#14171C" : "#6B7280",
+                  borderBottom: dmSubTab === t.key ? "2px solid #1D6FBD" : "2px solid transparent",
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {dmSubTab === "roster" && (
+            <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+              <p className="text-[11px] text-[#6B7280]">Students here sign in directly with their PIN — no shared class code needed, same as your Krazo roster.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="Student name"
+                  className="bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
+                  style={{ borderColor: "#E2E5EA" }}
+                />
+                <button onClick={addStudent} className="text-xs uppercase tracking-wide font-medium px-3 py-2 rounded" style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}>
+                  Add Student
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={downloadRosterTemplate} className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-medium px-3 py-1.5 rounded border" style={{ borderColor: "#E2E5EA", color: "#14171C", fontFamily: "'IBM Plex Mono', monospace" }}>
+                  <Download size={12} /> Template
+                </button>
+                <button onClick={() => rosterFileInputRef.current && rosterFileInputRef.current.click()} className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-medium px-3 py-1.5 rounded" style={{ backgroundColor: "#1D6FBD", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}>
+                  <Upload size={12} /> Upload CSV
+                </button>
+                <input ref={rosterFileInputRef} type="file" accept=".csv" onChange={handleRosterCSVUpload} className="hidden" />
+              </div>
+              {rosterUploadSummary && (
+                <p className="text-[11px]" style={{ color: rosterUploadSummary.skipped > 0 ? "#A66A08" : "#178A5E" }}>
+                  Added {rosterUploadSummary.added} student{rosterUploadSummary.added === 1 ? "" : "s"}.
+                  {rosterUploadSummary.skipped > 0 && ` Skipped ${rosterUploadSummary.skipped} row${rosterUploadSummary.skipped === 1 ? "" : "s"} (missing name).`}
+                </p>
+              )}
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {sectionRoster.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between gap-2 rounded border px-3 py-1.5" style={{ borderColor: "#E2E5EA" }}>
+                    <span className="text-sm text-[#14171C]">{r.name}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: "#EEF1F4", color: "#14171C", fontFamily: "'IBM Plex Mono', monospace" }}>{r.pin || "----"}</span>
+                      <button onClick={() => regeneratePin(r)} title="Generate a new PIN" className="text-[#6B7280] hover:text-[#1D6FBD]"><KeyRound size={13} /></button>
+                      <button onClick={() => { if (window.confirm(`Remove ${r.name}?`)) onDeleteRosterEntry(r.id); }} className="text-[#6B7280] hover:text-[#C42B22]"><Trash2 size={13} /></button>
+                    </div>
+                  </div>
+                ))}
+                {sectionRoster.length === 0 && <p className="text-xs text-[#6B7280]">No students in this section yet.</p>}
+              </div>
+            </div>
+          )}
+
+          {dmSubTab === "sheet" && (
+            <div className="space-y-3">
+              {activeWeek ? (
+                <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#178A5E", backgroundColor: "#178A5E11" }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-[#14171C]">{activeWeek.label}</div>
+                      <div className="text-[11px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Quota: {activeWeek.quota} per student · different events only</div>
+                    </div>
+                    <button
+                      onClick={() => { if (window.confirm("Archive this week's sheet? Students will no longer be able to sign up on it.")) onArchiveWeek(activeWeek.id); }}
+                      className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border"
+                      style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
+                    >
+                      Archive Week
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {(activeWeek.slots || []).map((slot) => (
+                      <div key={slot.id} className="rounded border px-3 py-2.5 space-y-1.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFF" }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-sm text-[#14171C] truncate">{slot.title}</div>
+                            {slot.date && <div className="text-[11px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{slot.date}</div>}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button onClick={() => adjustCap(slot.id, -1)} className="text-[#6B7280] hover:text-[#14171C] px-1">–</button>
+                            <span className="text-xs text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{(slot.signups || []).length}/{slot.cap}</span>
+                            <button onClick={() => adjustCap(slot.id, 1)} className="text-[#6B7280] hover:text-[#14171C] px-1">+</button>
+                            <button onClick={() => removeSlot(slot.id)} className="text-[#6B7280] hover:text-[#E8362E]"><Trash2 size={13} /></button>
+                          </div>
+                        </div>
+                        {(slot.signups || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {(slot.signups || []).map((p) => (
+                              <span key={p.name} className="flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-[#EEF1F4] border border-[#E2E5EA] text-[#14171C]">
+                                {p.name}
+                                <button onClick={() => onReleaseSlot(activeWeek.id, slot.id, p.name)} className="text-[#6B7280] hover:text-[#E8362E]"><X size={10} /></button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {(slot.signups || []).length < slot.cap && sectionRoster.length > 0 && (
+                          <select
+                            value=""
+                            onChange={(e) => { if (e.target.value) onClaimSlot(activeWeek.id, slot.id, e.target.value); }}
+                            className="text-[11px] bg-[#EEF1F4] border rounded px-2 py-1 text-[#14171C] outline-none"
+                            style={{ borderColor: "#E2E5EA" }}
+                          >
+                            <option value="">+ Assign student…</option>
+                            {sectionRoster.filter((r) => !(slot.signups || []).some((p) => p.name === r.name)).map((r) => (
+                              <option key={r.id} value={r.name}>{r.name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded border px-2.5 py-2 flex flex-wrap items-end gap-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
+                    <label className="flex-1 min-w-[120px]">
+                      <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Add Slot — Title</span>
+                      <input value={newSlotTitle} onChange={(e) => setNewSlotTitle(e.target.value)} className="w-full bg-[#FFFFFF] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none" style={{ borderColor: "#E2E5EA" }} />
+                    </label>
+                    <label className="w-28">
+                      <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Date</span>
+                      <input type="date" value={toDateInputValue(newSlotDate)} onChange={(e) => setNewSlotDate(fromDateInputValue(e.target.value))} className="w-full bg-[#FFFFFF] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none" style={{ borderColor: "#E2E5EA" }} />
+                    </label>
+                    <label className="w-16">
+                      <span className="text-[9px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Cap</span>
+                      <input type="number" min="1" value={newSlotCap} onChange={(e) => setNewSlotCap(e.target.value)} className="w-full bg-[#FFFFFF] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none" style={{ borderColor: "#E2E5EA" }} />
+                    </label>
+                    <button onClick={addManualSlot} className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded" style={{ backgroundColor: "#1D6FBD", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}>Add</button>
+                  </div>
+                </div>
+              ) : !parsedRows ? (
+                <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+                  <p className="text-[11px] text-[#6B7280]">No active sheet for this section. Paste the week's schedule email — same tool as the Content Board import — and build this section's slots from it.</p>
+                  <div className="flex gap-2">
+                    <label className="flex-1">
+                      <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Monday of that week</span>
+                      <input type="date" value={mondayISO} onChange={(e) => setMondayISO(e.target.value)} className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none mt-1" style={{ borderColor: "#E2E5EA" }} />
+                    </label>
+                    <label className="w-28">
+                      <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Quota / student</span>
+                      <input type="number" min="1" value={quotaInput} onChange={(e) => setQuotaInput(e.target.value)} className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none mt-1" style={{ borderColor: "#E2E5EA" }} />
+                    </label>
+                  </div>
+                  <textarea
+                    value={rawText} onChange={(e) => setRawText(e.target.value)}
+                    placeholder={"Monday\nTennis (V/JV) @ Lebanon- 4:30 p.m.\n..."}
+                    rows={8}
+                    className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-xs text-[#14171C] placeholder-[#6B7280] outline-none resize-none"
+                    style={{ borderColor: "#E2E5EA", fontFamily: "'IBM Plex Mono', monospace" }}
+                  />
+                  <button onClick={doParse} className="w-full text-xs uppercase tracking-wide font-medium py-2 rounded" style={{ backgroundColor: "#1D6FBD", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}>
+                    Parse Schedule
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+                  <p className="text-[11px] text-[#6B7280]">Uncheck anything this section doesn't need a slot for (sub-varsity games you're not covering, etc.), set caps, then publish.</p>
+                  <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                    {parsedRows.map((row, i) => (
+                      <div key={i} className="rounded border px-2.5 py-2 flex items-center gap-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFF" }}>
+                        <input type="checkbox" checked={row.include} onChange={(e) => updateParsedRow(i, { include: e.target.checked })} />
+                        <input value={row.title} onChange={(e) => updateParsedRow(i, { title: e.target.value })} className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1 text-xs text-[#14171C] outline-none" style={{ borderColor: "#E2E5EA" }} />
+                        <span className="text-[10px] text-[#6B7280] shrink-0" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{row.date}</span>
+                        <input type="number" min="1" value={row.cap} onChange={(e) => updateParsedRow(i, { cap: e.target.value })} className="w-14 bg-[#EEF1F4] border rounded px-2 py-1 text-xs text-[#14171C] outline-none shrink-0" style={{ borderColor: "#E2E5EA" }} title="Cap" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={publishWeek} className="flex-1 text-xs uppercase tracking-wide font-medium py-2 rounded" style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}>
+                      Publish Week
+                    </button>
+                    <button onClick={() => setParsedRows(null)} className="text-xs uppercase tracking-wide font-medium px-3 py-2 rounded border" style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}>
+                      Back
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {pastWeeks.length > 0 && (
+                <div className="rounded border px-3 py-3 space-y-1.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+                  <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Past Weeks ({pastWeeks.length})</div>
+                  {pastWeeks.map((w) => (
+                    <div key={w.id} className="flex items-center justify-between gap-2 rounded border px-3 py-1.5" style={{ borderColor: "#E2E5EA" }}>
+                      <span className="text-sm text-[#14171C]">{w.label}</span>
+                      <button onClick={() => { if (window.confirm("Delete this archived week permanently?")) onDeleteWeek(w.id); }} className="text-[#6B7280] hover:text-[#C42B22]"><Trash2 size={13} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {dmSubTab === "dashboard" && (
+            <div className="rounded border px-3 py-3" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+              {!activeWeek ? (
+                <p className="text-xs text-[#6B7280]">No active sheet this week — nothing to show yet.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {sectionRoster.map((r) => {
+                    const claimed = (activeWeek.slots || []).filter((s) => (s.signups || []).some((p) => p.name === r.name));
+                    const atQuota = claimed.length >= activeWeek.quota;
+                    return (
+                      <div key={r.id} className="flex items-center justify-between gap-2 rounded border px-3 py-2" style={{ borderColor: atQuota ? "#3EC28F" : "#F2A93B", backgroundColor: atQuota ? "#3EC28F11" : "#F2A93B11" }}>
+                        <div className="min-w-0">
+                          <div className="text-sm text-[#14171C]">{r.name}</div>
+                          {claimed.length > 0 && (
+                            <div className="text-[11px] text-[#6B7280] truncate">{claimed.map((s) => s.title).join(", ")}</div>
+                          )}
+                        </div>
+                        <span className="text-xs font-medium shrink-0" style={{ color: atQuota ? "#178A5E" : "#A66A08", fontFamily: "'IBM Plex Mono', monospace" }}>
+                          {claimed.length}/{activeWeek.quota}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {sectionRoster.length === 0 && <p className="text-xs text-[#6B7280]">No students in this section yet.</p>}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function AdminPanel({
   streams, onAdd, onUpdate, onDelete, passcodes, onUpdatePasscodes,
   roster, onAddRosterEntry, onAddRosterEntries, onDeleteRosterEntry,
   admins, onAddAdmin, onDeleteAdmin,
+  dmSections, dmRoster, dmWeeks,
+  onAddDmSection, onDeleteDmSection,
+  onAddDmRosterEntry, onAddDmRosterEntries, onDeleteDmRosterEntry,
+  onPublishDmWeek, onUpdateDmWeek, onArchiveDmWeek, onDeleteDmWeek,
+  onClaimDmSlot, onReleaseDmSlot,
   reminderHours, onUpdateReminderHours, adminName, onUpdateAdminName,
   initialEditId, onConsumedInitialEdit,
 }) {
@@ -1986,6 +2385,7 @@ function AdminPanel({
             { key: "schedule", label: "Schedule" },
             { key: "roster", label: `Roster (${roster.length})` },
             { key: "admins", label: `Admins (${admins.length})` },
+            { key: "digitalmedia", label: "Digital Media" },
             { key: "reminders", label: "Reminders" },
             { key: "security", label: "Security" },
           ].map((t) => (
@@ -2509,6 +2909,25 @@ function AdminPanel({
           </>
           )}
 
+          {adminTab === "digitalmedia" && (
+            <DigitalMediaAdmin
+              sections={dmSections}
+              roster={dmRoster}
+              weeks={dmWeeks}
+              onAddSection={onAddDmSection}
+              onDeleteSection={onDeleteDmSection}
+              onAddRosterEntry={onAddDmRosterEntry}
+              onAddRosterEntries={onAddDmRosterEntries}
+              onDeleteRosterEntry={onDeleteDmRosterEntry}
+              onPublishWeek={onPublishDmWeek}
+              onUpdateWeek={onUpdateDmWeek}
+              onArchiveWeek={onArchiveDmWeek}
+              onDeleteWeek={onDeleteDmWeek}
+              onClaimSlot={onClaimDmSlot}
+              onReleaseSlot={onReleaseDmSlot}
+            />
+          )}
+
           {adminTab === "reminders" && (
           <>
           {/* Reminders */}
@@ -2629,7 +3048,7 @@ function AdminPanel({
   );
 }
 
-function PasscodeGate({ passcodes, admins = [], onUnlock }) {
+function PasscodeGate({ passcodes, admins = [], dmRoster = [], onUnlock }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState(false);
 
@@ -2639,6 +3058,8 @@ function PasscodeGate({ passcodes, admins = [], onUnlock }) {
     const adminMatch = admins.find((a) => a.pin && a.pin === v);
     if (adminMatch) { onUnlock("admin", { id: adminMatch.id, name: adminMatch.name, email: "" }); return; }
     if (v.toLowerCase() === passcodes.admin.toLowerCase()) { onUnlock("admin"); return; }
+    const dmMatch = dmRoster.find((r) => r.pin && r.pin === v);
+    if (dmMatch) { onUnlock("dm", { id: dmMatch.id, name: dmMatch.name, email: "", sectionId: dmMatch.sectionId }); return; }
     if (v.toLowerCase() === passcodes.student.toLowerCase()) { onUnlock("student"); return; }
     setError(true);
   };
@@ -2742,6 +3163,140 @@ function StudentSignInModal({ roster, onSignIn, onClose }) {
   );
 }
 
+function DigitalMediaView({ identity, sections, weeks, links, onClaim, onRelease, onLogout }) {
+  const section = sections.find((s) => s.id === identity.sectionId);
+  const week = weeks.find((w) => w.sectionId === identity.sectionId && !w.archived);
+  const [showLinks, setShowLinks] = useState(false);
+
+  const slots = week ? (week.slots || []) : [];
+  const quota = week ? (week.quota || 1) : 0;
+  const mySignups = slots.reduce((sum, s) => sum + (s.signups || []).filter((p) => p.name === identity.name).length, 0);
+
+  return (
+    <div className="min-h-screen w-full" style={{ backgroundColor: "#FFFFFF" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+        * { font-family: 'Inter', sans-serif; }
+      `}</style>
+
+      <div className="border-b sticky top-0 z-30" style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFFee", backdropFilter: "blur(6px)" }}>
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded flex items-center justify-center" style={{ backgroundColor: "#1D6FBD" }}>
+              <ImageIcon size={16} color="#FFFFFF" />
+            </div>
+            <div>
+              <h1 className="text-base font-bold uppercase tracking-wider text-[#14171C] leading-none" style={{ fontFamily: "'Oswald', sans-serif" }}>
+                Digital Media
+              </h1>
+              <span className="text-[10px] text-[#14171C] tracking-wide">Gameday Graphics Sign-Up{section ? ` · ${section.name}` : ""}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowLinks((v) => !v)}
+              className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-medium px-2.5 py-1.5 rounded border"
+              style={{ borderColor: "#E2E5EA", color: "#14171C", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              <ExternalLink size={13} /> <span className="hidden sm:inline">Links</span>
+            </button>
+            <button
+              onClick={onLogout}
+              title="Sign out"
+              className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-medium px-2.5 py-1.5 rounded border"
+              style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              <Lock size={13} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <div className="rounded border px-3 py-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+          <p className="text-sm text-[#14171C]">
+            Signed in as <span className="font-medium">{identity.name}</span>
+          </p>
+        </div>
+
+        {showLinks && (
+          <div className="rounded border px-3 py-3" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+            <LinksView links={links} onAdd={() => {}} onEdit={() => {}} onDelete={() => {}} studentIdentity={null} onRequireSignIn={() => {}} accessLevel="dm" viewerAudience="dm" />
+          </div>
+        )}
+
+        {!week ? (
+          <div className="rounded border border-dashed px-4 py-10 text-center text-sm text-[#6B7280]" style={{ borderColor: "#E2E5EA" }}>
+            No sign-up sheet posted yet for your section this week. Check back soon.
+          </div>
+        ) : (
+          <>
+            <div className="rounded border px-3 py-2.5" style={{ borderColor: mySignups >= quota ? "#178A5E" : "#F2A93B", backgroundColor: mySignups >= quota ? "#178A5E11" : "#F2A93B11" }}>
+              <p className="text-sm font-medium" style={{ color: mySignups >= quota ? "#178A5E" : "#A66A08" }}>
+                You've signed up for {mySignups} of {quota} required
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {slots.map((slot) => {
+                const signups = slot.signups || [];
+                const full = signups.length >= slot.cap;
+                const alreadyIn = signups.some((p) => p.name === identity.name);
+                const canClaim = !full && !alreadyIn && mySignups < quota;
+                return (
+                  <div key={slot.id} className="rounded-md border px-3 py-3 space-y-1.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-medium text-[#14171C]">{slot.title}</div>
+                        {slot.date && <div className="text-xs text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{slot.date}</div>}
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0" style={{ backgroundColor: full ? "#E2E5EA" : "#3EC28F22", color: full ? "#6B7280" : "#178A5E", fontFamily: "'IBM Plex Mono', monospace" }}>
+                        {signups.length}/{slot.cap}
+                      </span>
+                    </div>
+                    {signups.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {signups.map((p) => (
+                          <span key={p.name} className="text-[11px] px-1.5 py-0.5 rounded bg-[#EEF1F4] border border-[#E2E5EA] text-[#14171C]">
+                            {p.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {alreadyIn ? (
+                      <button
+                        onClick={() => onRelease(week.id, slot.id, identity.name)}
+                        className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border"
+                        style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
+                      >
+                        Remove My Sign-Up
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => canClaim && onClaim(week.id, slot.id, identity.name)}
+                        disabled={!canClaim}
+                        className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded disabled:opacity-40"
+                        style={{ backgroundColor: "#1D6FBD", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
+                      >
+                        {full ? "Full" : mySignups >= quota ? "At Quota" : "Sign Up"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {slots.length === 0 && (
+                <div className="rounded border border-dashed px-3 py-6 text-center text-xs text-[#6B7280]" style={{ borderColor: "#E2E5EA" }}>
+                  No games posted for this week yet.
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [accessLevel, setAccessLevel] = useState(null); // null | 'student' | 'admin'
   const [studentIdentity, setStudentIdentity] = useState(null); // null | {id, name, email}
@@ -2756,6 +3311,9 @@ export default function App() {
   const [focusItems, setFocusItems] = useState([]);
   const [roster, setRoster] = useState([]);
   const [admins, setAdmins] = useState([]);
+  const [dmSections, setDmSections] = useState([]);
+  const [dmRoster, setDmRoster] = useState([]);
+  const [dmWeeks, setDmWeeks] = useState([]);
   const [dataReady, setDataReady] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [showAddJob, setShowAddJob] = useState(false);
@@ -2835,6 +3393,9 @@ export default function App() {
       onSnapshot(collection(db, "roster"), (snap) => setRoster(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "admins"), (snap) => setAdmins(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "focusItems"), (snap) => setFocusItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "dmSections"), (snap) => setDmSections(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "dmRoster"), (snap) => setDmRoster(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "dmWeeks"), (snap) => setDmWeeks(snap.docs.map((d) => ({ id: d.id, ...d.data() })))),
       onSnapshot(doc(db, "settings", "app"), (d) => {
         if (!d.exists()) return;
         const data = d.data();
@@ -2872,10 +3433,25 @@ export default function App() {
       <PasscodeGate
         passcodes={passcodes}
         admins={admins}
+        dmRoster={dmRoster}
         onUnlock={(level, identity) => {
           setAccessLevel(level);
           if (identity) setStudentIdentity(identity);
         }}
+      />
+    );
+  }
+
+  if (accessLevel === "dm") {
+    return (
+      <DigitalMediaView
+        identity={studentIdentity}
+        sections={dmSections}
+        weeks={dmWeeks}
+        links={links}
+        onClaim={claimDmSlot}
+        onRelease={releaseDmSlot}
+        onLogout={() => { setAccessLevel(null); setStudentIdentity(null); }}
       />
     );
   }
@@ -2966,6 +3542,80 @@ export default function App() {
 
   const addAdmin = (entry) => setDoc(doc(db, "admins", entry.id), entry);
   const deleteAdmin = (id) => deleteDoc(doc(db, "admins", id));
+
+  // ---- Digital Media ----
+  const addDmSection = (section) => setDoc(doc(db, "dmSections", section.id), section);
+  const deleteDmSection = (id) => deleteDoc(doc(db, "dmSections", id));
+
+  const addDmRosterEntry = (entry) => setDoc(doc(db, "dmRoster", entry.id), entry);
+  const addDmRosterEntries = async (entries) => {
+    const batch = writeBatch(db);
+    entries.forEach((e) => batch.set(doc(db, "dmRoster", e.id), e));
+    await batch.commit();
+  };
+  const deleteDmRosterEntry = (id) => deleteDoc(doc(db, "dmRoster", id));
+
+  const publishDmWeek = async (week) => {
+    const batch = writeBatch(db);
+    dmWeeks
+      .filter((w) => w.sectionId === week.sectionId && !w.archived)
+      .forEach((w) => batch.update(doc(db, "dmWeeks", w.id), { archived: true }));
+    batch.set(doc(db, "dmWeeks", week.id), week);
+    await batch.commit();
+  };
+  const updateDmWeek = (id, patch) => updateDoc(doc(db, "dmWeeks", id), patch);
+  const archiveDmWeek = (id) => updateDoc(doc(db, "dmWeeks", id), { archived: true });
+  const deleteDmWeek = (id) => deleteDoc(doc(db, "dmWeeks", id));
+
+  // Capped, different-event-only, quota-aware — same transaction pattern as
+  // claimRole, for the same reason: prevents lost sign-ups under quick clicks.
+  const claimDmSlot = async (weekId, slotId, studentName) => {
+    const ref = doc(db, "dmWeeks", weekId);
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const slots = data.slots || [];
+        const slotIdx = slots.findIndex((s) => s.id === slotId);
+        if (slotIdx === -1) return;
+        const slot = slots[slotIdx];
+        const signups = slot.signups || [];
+        if (signups.some((p) => p.name === studentName)) return; // already in this slot
+        if (signups.length >= slot.cap) return; // full
+        const totalForStudent = slots.reduce(
+          (sum, s) => sum + (s.signups || []).filter((p) => p.name === studentName).length, 0
+        );
+        if (totalForStudent >= (data.quota || 1)) return; // already at quota
+        const newSlots = slots.map((s, i) => (i === slotIdx ? { ...s, signups: [...signups, { name: studentName }] } : s));
+        tx.update(ref, { slots: newSlots });
+      });
+    } catch (err) {
+      console.error("claimDmSlot failed:", err);
+    }
+  };
+
+  const releaseDmSlot = async (weekId, slotId, studentName) => {
+    const ref = doc(db, "dmWeeks", weekId);
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const slots = data.slots || [];
+        const slotIdx = slots.findIndex((s) => s.id === slotId);
+        if (slotIdx === -1) return;
+        const slot = slots[slotIdx];
+        const newSlots = slots.map((s, i) =>
+          i === slotIdx ? { ...s, signups: (s.signups || []).filter((p) => p.name !== studentName) } : s
+        );
+        tx.update(ref, { slots: newSlots });
+      });
+    } catch (err) {
+      console.error("releaseDmSlot failed:", err);
+    }
+  };
+
 
   const moveJob = (id, dir) => {
     const job = jobs.find((j) => j.id === id);
@@ -3338,6 +3988,20 @@ export default function App() {
             admins={admins}
             onAddAdmin={addAdmin}
             onDeleteAdmin={deleteAdmin}
+            dmSections={dmSections}
+            dmRoster={dmRoster}
+            dmWeeks={dmWeeks}
+            onAddDmSection={addDmSection}
+            onDeleteDmSection={deleteDmSection}
+            onAddDmRosterEntry={addDmRosterEntry}
+            onAddDmRosterEntries={addDmRosterEntries}
+            onDeleteDmRosterEntry={deleteDmRosterEntry}
+            onPublishDmWeek={publishDmWeek}
+            onUpdateDmWeek={updateDmWeek}
+            onArchiveDmWeek={archiveDmWeek}
+            onDeleteDmWeek={deleteDmWeek}
+            onClaimDmSlot={claimDmSlot}
+            onReleaseDmSlot={releaseDmSlot}
             reminderHours={reminderHours}
             onUpdateReminderHours={setReminderHours}
             adminName={adminName}
