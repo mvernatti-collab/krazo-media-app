@@ -3341,6 +3341,79 @@ function AppInner() {
     setTab("content");
   };
 
+  // ---- Digital Media ----
+  const addDmSection = (section) => setDoc(doc(db, "dmSections", section.id), section);
+  const deleteDmSection = (id) => deleteDoc(doc(db, "dmSections", id));
+
+  const addDmRosterEntry = (entry) => setDoc(doc(db, "dmRoster", entry.id), entry);
+  const addDmRosterEntries = async (entries) => {
+    const batch = writeBatch(db);
+    entries.forEach((e) => batch.set(doc(db, "dmRoster", e.id), e));
+    await batch.commit();
+  };
+  const deleteDmRosterEntry = (id) => deleteDoc(doc(db, "dmRoster", id));
+
+  const publishDmWeek = async (week) => {
+    const batch = writeBatch(db);
+    dmWeeks
+      .filter((w) => w.sectionId === week.sectionId && !w.archived)
+      .forEach((w) => batch.update(doc(db, "dmWeeks", w.id), { archived: true }));
+    batch.set(doc(db, "dmWeeks", week.id), week);
+    await batch.commit();
+  };
+  const updateDmWeek = (id, patch) => updateDoc(doc(db, "dmWeeks", id), patch);
+  const archiveDmWeek = (id) => updateDoc(doc(db, "dmWeeks", id), { archived: true });
+  const deleteDmWeek = (id) => deleteDoc(doc(db, "dmWeeks", id));
+
+  // Capped, different-event-only, quota-aware — same transaction pattern as
+  // claimRole, for the same reason: prevents lost sign-ups under quick clicks.
+  const claimDmSlot = async (weekId, slotId, studentName) => {
+    const ref = doc(db, "dmWeeks", weekId);
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const slots = data.slots || [];
+        const slotIdx = slots.findIndex((s) => s.id === slotId);
+        if (slotIdx === -1) return;
+        const slot = slots[slotIdx];
+        const signups = slot.signups || [];
+        if (signups.some((p) => p.name === studentName)) return; // already in this slot
+        if (signups.length >= slot.cap) return; // full
+        const totalForStudent = slots.reduce(
+          (sum, s) => sum + (s.signups || []).filter((p) => p.name === studentName).length, 0
+        );
+        if (totalForStudent >= (data.quota || 1)) return; // already at quota
+        const newSlots = slots.map((s, i) => (i === slotIdx ? { ...s, signups: [...signups, { name: studentName }] } : s));
+        tx.update(ref, { slots: newSlots });
+      });
+    } catch (err) {
+      console.error("claimDmSlot failed:", err);
+    }
+  };
+
+  const releaseDmSlot = async (weekId, slotId, studentName) => {
+    const ref = doc(db, "dmWeeks", weekId);
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const slots = data.slots || [];
+        const slotIdx = slots.findIndex((s) => s.id === slotId);
+        if (slotIdx === -1) return;
+        const slot = slots[slotIdx];
+        const newSlots = slots.map((s, i) =>
+          i === slotIdx ? { ...s, signups: (s.signups || []).filter((p) => p.name !== studentName) } : s
+        );
+        tx.update(ref, { slots: newSlots });
+      });
+    } catch (err) {
+      console.error("releaseDmSlot failed:", err);
+    }
+  };
+
   // Signing in as admin drops you straight into your own Admin tab instead of
   // the student-facing boards — it's just another tab from here on, so you can
   // freely switch to Calendar/Stream Board/etc. and back without losing anything.
@@ -3542,80 +3615,6 @@ function AppInner() {
 
   const addAdmin = (entry) => setDoc(doc(db, "admins", entry.id), entry);
   const deleteAdmin = (id) => deleteDoc(doc(db, "admins", id));
-
-  // ---- Digital Media ----
-  const addDmSection = (section) => setDoc(doc(db, "dmSections", section.id), section);
-  const deleteDmSection = (id) => deleteDoc(doc(db, "dmSections", id));
-
-  const addDmRosterEntry = (entry) => setDoc(doc(db, "dmRoster", entry.id), entry);
-  const addDmRosterEntries = async (entries) => {
-    const batch = writeBatch(db);
-    entries.forEach((e) => batch.set(doc(db, "dmRoster", e.id), e));
-    await batch.commit();
-  };
-  const deleteDmRosterEntry = (id) => deleteDoc(doc(db, "dmRoster", id));
-
-  const publishDmWeek = async (week) => {
-    const batch = writeBatch(db);
-    dmWeeks
-      .filter((w) => w.sectionId === week.sectionId && !w.archived)
-      .forEach((w) => batch.update(doc(db, "dmWeeks", w.id), { archived: true }));
-    batch.set(doc(db, "dmWeeks", week.id), week);
-    await batch.commit();
-  };
-  const updateDmWeek = (id, patch) => updateDoc(doc(db, "dmWeeks", id), patch);
-  const archiveDmWeek = (id) => updateDoc(doc(db, "dmWeeks", id), { archived: true });
-  const deleteDmWeek = (id) => deleteDoc(doc(db, "dmWeeks", id));
-
-  // Capped, different-event-only, quota-aware — same transaction pattern as
-  // claimRole, for the same reason: prevents lost sign-ups under quick clicks.
-  const claimDmSlot = async (weekId, slotId, studentName) => {
-    const ref = doc(db, "dmWeeks", weekId);
-    try {
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(ref);
-        if (!snap.exists()) return;
-        const data = snap.data();
-        const slots = data.slots || [];
-        const slotIdx = slots.findIndex((s) => s.id === slotId);
-        if (slotIdx === -1) return;
-        const slot = slots[slotIdx];
-        const signups = slot.signups || [];
-        if (signups.some((p) => p.name === studentName)) return; // already in this slot
-        if (signups.length >= slot.cap) return; // full
-        const totalForStudent = slots.reduce(
-          (sum, s) => sum + (s.signups || []).filter((p) => p.name === studentName).length, 0
-        );
-        if (totalForStudent >= (data.quota || 1)) return; // already at quota
-        const newSlots = slots.map((s, i) => (i === slotIdx ? { ...s, signups: [...signups, { name: studentName }] } : s));
-        tx.update(ref, { slots: newSlots });
-      });
-    } catch (err) {
-      console.error("claimDmSlot failed:", err);
-    }
-  };
-
-  const releaseDmSlot = async (weekId, slotId, studentName) => {
-    const ref = doc(db, "dmWeeks", weekId);
-    try {
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(ref);
-        if (!snap.exists()) return;
-        const data = snap.data();
-        const slots = data.slots || [];
-        const slotIdx = slots.findIndex((s) => s.id === slotId);
-        if (slotIdx === -1) return;
-        const slot = slots[slotIdx];
-        const newSlots = slots.map((s, i) =>
-          i === slotIdx ? { ...s, signups: (s.signups || []).filter((p) => p.name !== studentName) } : s
-        );
-        tx.update(ref, { slots: newSlots });
-      });
-    } catch (err) {
-      console.error("releaseDmSlot failed:", err);
-    }
-  };
-
 
   const moveJob = (id, dir) => {
     const job = jobs.find((j) => j.id === id);
