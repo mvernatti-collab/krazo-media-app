@@ -61,12 +61,19 @@ function nextMondayISO() {
 function parseScheduleText(text, mondayISO) {
   const [y, m, d] = mondayISO.split("-").map(Number);
   const monday = new Date(y, m - 1, d);
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const rawLines = text.split("\n");
   const jobs = [];
   let offset = null;
   let explicitDate = null; // Date, when the header itself has a real date like "Monday-9/7"
+  let currentParent = null; // text of a tournament-style header whose children follow, indented
 
-  lines.forEach((line) => {
+  const isIndented = (raw) => (raw.length - raw.trimStart().length) >= 3;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const raw = rawLines[i];
+    const line = raw.trim();
+    if (!line) continue;
+
     const lower = line.toLowerCase();
     // Match a day name at the START of the line, regardless of whatever follows
     // it (a colon, a dash, a date like "-9/7", extra spaces...).
@@ -74,15 +81,39 @@ function parseScheduleText(text, mondayISO) {
     if (dayKey) {
       offset = DAY_OFFSET[dayKey];
       explicitDate = null;
+      currentParent = null;
       const dateMatch = line.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
       if (dateMatch) {
         const mm = parseInt(dateMatch[1], 10);
         const dd = parseInt(dateMatch[2], 10);
         if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) explicitDate = new Date(SEASON_YEAR, mm - 1, dd);
       }
-      return;
+      continue;
     }
-    if (offset === null && !explicitDate) return;
+    if (offset === null && !explicitDate) continue;
+
+    const indented = isIndented(raw);
+
+    if (!indented) {
+      // A tournament-style header (e.g. "Softball (V) - Ozark Fall Festival- TBD")
+      // has no game of its own — the real matchups are the indented lines under
+      // it. Detect that by peeking at the next non-empty line; if it's indented,
+      // treat this line as a parent label rather than an event on its own.
+      let nextIndented = false;
+      for (let j = i + 1; j < rawLines.length; j++) {
+        if (rawLines[j].trim() === "") continue;
+        nextIndented = isIndented(rawLines[j]);
+        break;
+      }
+      if (nextIndented) {
+        currentParent = line.replace(/[-–]\s*$/, "").trim();
+        continue;
+      }
+      currentParent = null;
+    }
+
+    const title = indented && currentParent ? `${currentParent} — ${line}` : line;
+
     let eventDate;
     if (explicitDate) {
       eventDate = explicitDate;
@@ -93,12 +124,12 @@ function parseScheduleText(text, mondayISO) {
     const due = new Date(eventDate);
     due.setDate(due.getDate() - 2); // 48 hours before the event
     jobs.push({
-      title: line,
+      title,
       due: `${MONTHS[due.getMonth()]} ${due.getDate()}`,
       eventDate: `${MONTHS[eventDate.getMonth()]} ${eventDate.getDate()}`,
       type: "Graphic",
     });
-  });
+  }
   return jobs;
 }
 
@@ -209,6 +240,19 @@ const CATEGORY_LABELS = { livestream: "Livestream", content: "Content Only", spe
 function eventCategory(ev) {
   if (ev.sportKey === SPECIAL_EVENT_SPORT) return "special";
   return ev.openSignup ? "content" : "livestream";
+}
+// Color = site (red Home / black Away). Fill = category (solid Livestream / outline Content).
+// Special events keep their own purple, filled, unaffected by site.
+function eventPillStyle(ev) {
+  const cat = eventCategory(ev);
+  if (cat === "special") {
+    return { color: "#FFFFFF", backgroundColor: CATEGORY_COLORS.special, borderColor: CATEGORY_COLORS.special };
+  }
+  const siteColor = ev.site === "Home" ? "#ED1C24" : "#14171C";
+  const filled = cat === "livestream";
+  return filled
+    ? { color: "#FFFFFF", backgroundColor: siteColor, borderColor: siteColor }
+    : { color: siteColor, backgroundColor: siteColor + "18", borderColor: siteColor };
 }
 
 const mk = (id, sportKey, opponent, site, date, time, opts = {}) => {
@@ -364,9 +408,9 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
             <span className="text-xs text-[#14171C]">{stream.opponent}</span>
             <span
               className="text-[9px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded"
-              style={{ color: "#FFFFFF", backgroundColor: CATEGORY_COLORS[eventCategory(stream)], fontFamily: "'IBM Plex Mono', monospace" }}
+              style={{ color: eventPillStyle(stream).color, backgroundColor: eventPillStyle(stream).backgroundColor, border: `1px solid ${eventPillStyle(stream).borderColor}`, fontFamily: "'IBM Plex Mono', monospace" }}
             >
-              {CATEGORY_LABELS[eventCategory(stream)]} · {stream.site === "Home" ? "H" : "A"}
+              {stream.site === "Home" ? "Home" : "Away"} · {CATEGORY_LABELS[eventCategory(stream)]}
             </span>
           </div>
           <div className="flex items-center gap-3 mt-0.5 text-[11px] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -1116,7 +1160,10 @@ function BulkJobImportModal({ onClose, onBulkAdd, studentIdentity }) {
 
 function CalendarView({ streams, onSelectStream, onEditStream, accessLevel }) {
   const [viewMode, setViewMode] = useState("month"); // 'month' | 'week'
-  const [viewMonth, setViewMonth] = useState(() => new Date(SEASON_YEAR, 7, 1)); // Aug 2026
+  const [viewMonth, setViewMonth] = useState(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), 1);
+  });
   const [weekStart, setWeekStart] = useState(() => {
     const t = new Date();
     return new Date(t.getFullYear(), t.getMonth(), t.getDate() - t.getDay());
@@ -1174,7 +1221,7 @@ function CalendarView({ streams, onSelectStream, onEditStream, accessLevel }) {
       </button>
       <span
         className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0"
-        style={{ color: "#FFFFFF", backgroundColor: CATEGORY_COLORS[eventCategory(ev)], fontFamily: "'IBM Plex Mono', monospace" }}
+        style={{ color: eventPillStyle(ev).color, backgroundColor: eventPillStyle(ev).backgroundColor, border: `1px solid ${eventPillStyle(ev).borderColor}`, fontFamily: "'IBM Plex Mono', monospace" }}
       >
         {ev.site === "Home" ? "Home" : "Away"} · {CATEGORY_LABELS[eventCategory(ev)]}
       </span>
@@ -1215,14 +1262,20 @@ function CalendarView({ streams, onSelectStream, onEditStream, accessLevel }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-3">
-        {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-          <span key={key} className="flex items-center gap-1 text-[10px] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-            <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: CATEGORY_COLORS[key] }} />
-            {label}
-          </span>
-        ))}
-        <span className="text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-          ·H = Home · ·A = Away
+        <span className="flex items-center gap-1 text-[10px] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "#ED1C24" }} /> Home
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "#14171C" }} /> Away
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "#6B7280" }} /> Filled = Livestream
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+          <span className="h-2 w-2 rounded-sm" style={{ border: "1px solid #6B7280" }} /> Outline = Content Only
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-[#7C3AED]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "#7C3AED" }} /> Special Event
         </span>
       </div>
 
@@ -1270,15 +1323,14 @@ function CalendarView({ streams, onSelectStream, onEditStream, accessLevel }) {
                       {date.getDate()}
                     </span>
                     {dayEvents.slice(0, 3).map((ev) => {
-                      const c = CATEGORY_COLORS[eventCategory(ev)];
-                      const siteLetter = ev.site === "Home" ? "H" : "A";
+                      const style = eventPillStyle(ev);
                       return (
                         <span
                           key={ev.id}
                           className="text-[8px] sm:text-[9px] uppercase tracking-wide px-1 rounded truncate w-full"
-                          style={{ color: "#FFFFFF", backgroundColor: c, fontFamily: "'IBM Plex Mono', monospace" }}
+                          style={{ color: style.color, backgroundColor: style.backgroundColor, border: `1px solid ${style.borderColor}`, fontFamily: "'IBM Plex Mono', monospace" }}
                         >
-                          {sportAbbr(ev.sportKey)}·{siteLetter}
+                          {sportAbbr(ev.sportKey)}
                         </span>
                       );
                     })}
@@ -2793,6 +2845,26 @@ function AdminPanel({
               </label>
             </div>
 
+            <div className="flex flex-col gap-1.5 pt-1">
+              <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                Sign-Up Mechanism
+              </span>
+              <label className="flex items-center gap-2 text-xs text-[#14171C]">
+                <input
+                  type="radio" name="signupMode" checked={form.openRoles.length > 0}
+                  onChange={() => setForm((f) => ({ ...f, openRoles: [...ROLES] }))}
+                />
+                Structured positions (specific roles, listed below)
+              </label>
+              <label className="flex items-center gap-2 text-xs text-[#14171C]">
+                <input
+                  type="radio" name="signupMode" checked={form.openRoles.length === 0}
+                  onChange={() => setForm((f) => ({ ...f, openRoles: [] }))}
+                />
+                Open call (anyone signs up with their own name, no fixed roles)
+              </label>
+            </div>
+
             <div className="rounded border px-2.5 py-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -2804,7 +2876,7 @@ function AdminPanel({
                   </div>
                 </div>
                 <p className="text-[10px] text-[#6B7280] mb-1.5">
-                  Leave everything unchecked for a plain open call (anyone signs up with their own name, no fixed roles) — the default for Content Only events. Check specific positions on any event, Livestream or Content Only, to switch it to structured crew sign-up instead.
+                  Only matters if Structured Positions is selected above — check specific roles here to build your crew list.
                 </p>
                 <div className="grid grid-cols-1 gap-1.5">
                   {ALL_ROLES.map((role) => (
