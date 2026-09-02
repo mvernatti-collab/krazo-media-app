@@ -242,13 +242,9 @@ const initialStreams = [
   mk("sb24", "Softball", "vs Marshfield (Teacher Appreciation Night)", "Home", "Oct 7", "5:00 PM"),
 ];
 
-const initialJobs = [
-  { id: "j1", title: "Season Hype Trailer", type: "Promo", stage: "requested", assignee: "Sam R.", due: "Aug 12", link: "" },
-  { id: "j2", title: "Semifinal Highlight Reel", type: "Video", stage: "production", assignee: "Josh T.", due: "Aug 11", link: "" },
-  { id: "j3", title: "Roster Spotlight — #12", type: "Graphic", stage: "production", assignee: "Kayla P.", due: "Aug 13", link: "" },
-  { id: "j4", title: "Post-Game Recap Article", type: "Article", stage: "review", assignee: "Dre W.", due: "Aug 9", link: "" },
-  { id: "j5", title: "Showcase Recap Video", type: "Video", stage: "published", assignee: "Nate G.", due: "Aug 4", link: "https://drive.google.com/krazo/showcase-recap" },
-];
+// Empty on purpose — the Content Board should start blank for a fresh deployment,
+// not pre-filled with placeholder demo jobs assigned to made-up names.
+const initialJobs = [];
 
 const initialLinks = [
   { id: "l1", title: "Ozark Tigers Athletics", url: "https://www.ozarkmotigers.org", note: "Official schedules & rosters" },
@@ -1332,11 +1328,15 @@ function CalendarView({ streams, onSelectStream, onEditStream, accessLevel }) {
 
 const AUDIENCE_LABELS = { all: "Everyone", krazo: "Krazo Only", dm: "Digital Media Only" };
 
-function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onClearForNewWeek, onJumpToEvent, onJumpToJob, studentIdentity, readOnly }) {
+function FocusBoard({ items, streams, jobs, onAdd, onEdit, onToggleDone, onToggleArchived, onDelete, onJumpToEvent, onJumpToJob, studentIdentity, readOnly }) {
   const [text, setText] = useState("");
   const [linkedStreamId, setLinkedStreamId] = useState("");
   const [linkedJobId, setLinkedJobId] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [editLinkedStreamId, setEditLinkedStreamId] = useState("");
+  const [editLinkedJobId, setEditLinkedJobId] = useState("");
 
   const submit = () => {
     if (!text.trim()) return;
@@ -1347,8 +1347,19 @@ function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onCle
     setText(""); setLinkedStreamId(""); setLinkedJobId("");
   };
 
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditText(item.text);
+    setEditLinkedStreamId(item.linkedStreamId || "");
+    setEditLinkedJobId(item.linkedJobId || "");
+  };
+  const saveEdit = () => {
+    if (!editText.trim()) return;
+    onEdit(editingId, { text: editText.trim(), linkedStreamId: editLinkedStreamId, linkedJobId: editLinkedJobId });
+    setEditingId(null);
+  };
+
   const visible = items.filter((i) => !!i.archived === showArchived);
-  const activeCount = items.filter((i) => !i.archived).length;
 
   return (
     <div>
@@ -1414,18 +1425,41 @@ function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onCle
         </div>
       )}
 
-      {!readOnly && !showArchived && activeCount > 0 && (
-        <button
-          onClick={() => { if (window.confirm("Archive everything currently active so you can start fresh for the next week? Nothing gets deleted — it all moves to Archived.")) onClearForNewWeek(); }}
-          className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border mb-3"
-          style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
-        >
-          Archive This Week & Start Next
-        </button>
-      )}
-
       <div className="space-y-2">
         {visible.map((item) => {
+          if (editingId === item.id) {
+            return (
+              <div key={item.id} className="rounded-md border px-3 py-3 space-y-2" style={{ borderColor: "#1D6FBD", backgroundColor: "#F6F7F9" }}>
+                <input
+                  value={editText} onChange={(e) => setEditText(e.target.value)}
+                  className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] outline-none"
+                  style={{ borderColor: "#E2E5EA" }}
+                />
+                <div className="flex gap-2">
+                  <select
+                    value={editLinkedStreamId} onChange={(e) => setEditLinkedStreamId(e.target.value)}
+                    className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+                    style={{ borderColor: "#E2E5EA" }}
+                  >
+                    <option value="">Link to event (optional)</option>
+                    {streams.map((s) => <option key={s.id} value={s.id}>{s.title} {s.opponent} — {s.date}</option>)}
+                  </select>
+                  <select
+                    value={editLinkedJobId} onChange={(e) => setEditLinkedJobId(e.target.value)}
+                    className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+                    style={{ borderColor: "#E2E5EA" }}
+                  >
+                    <option value="">Link to job (optional)</option>
+                    {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={saveEdit} className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded" style={{ backgroundColor: "#1D6FBD", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}>Save</button>
+                  <button onClick={() => setEditingId(null)} className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border" style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}>Cancel</button>
+                </div>
+              </div>
+            );
+          }
           const linkedStream = item.linkedStreamId ? streams.find((s) => s.id === item.linkedStreamId) : null;
           const linkedJob = item.linkedJobId ? jobs.find((j) => j.id === item.linkedJobId) : null;
           return (
@@ -1455,9 +1489,17 @@ function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onCle
                 </div>
               </div>
               {!readOnly && (
-                <button onClick={() => onDelete(item.id)} className="text-[#6B7280] hover:text-[#C42B22] shrink-0">
-                  <Trash2 size={13} />
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => startEdit(item)} className="text-[#6B7280] hover:text-[#1D6FBD]"><Pencil size={13} /></button>
+                  <button
+                    onClick={() => onToggleArchived(item.id, !item.archived)}
+                    title={item.archived ? "Unarchive" : "Archive"}
+                    className="text-[#6B7280] hover:text-[#1D6FBD]"
+                  >
+                    <Archive size={13} />
+                  </button>
+                  <button onClick={() => onDelete(item.id)} className="text-[#6B7280] hover:text-[#C42B22]"><Trash2 size={13} /></button>
+                </div>
               )}
             </div>
           );
@@ -3755,13 +3797,10 @@ function AppInner() {
   const editLink = (id, patch) => updateDoc(doc(db, "links", id), patch);
 
   const addFocusItem = (item) => setDoc(doc(db, "focusItems", item.id), item);
+  const editFocusItem = (id, patch) => updateDoc(doc(db, "focusItems", id), patch);
   const toggleFocusDone = (id, done) => updateDoc(doc(db, "focusItems", id), { done });
+  const toggleFocusArchived = (id, archived) => updateDoc(doc(db, "focusItems", id), { archived });
   const deleteFocusItem = (id) => deleteDoc(doc(db, "focusItems", id));
-  const clearFocusForNewWeek = async () => {
-    const batch = writeBatch(db);
-    focusItems.filter((i) => !i.archived).forEach((i) => batch.update(doc(db, "focusItems", i.id), { archived: true }));
-    await batch.commit();
-  };
   const deleteLink = (id) => deleteDoc(doc(db, "links", id));
 
   const addRosterEntry = (entry) => setDoc(doc(db, "roster", entry.id), entry);
@@ -4124,9 +4163,10 @@ function AppInner() {
             streams={streams}
             jobs={jobs}
             onAdd={addFocusItem}
+            onEdit={editFocusItem}
             onToggleDone={toggleFocusDone}
+            onToggleArchived={toggleFocusArchived}
             onDelete={deleteFocusItem}
-            onClearForNewWeek={clearFocusForNewWeek}
             onJumpToEvent={jumpToEvent}
             onJumpToJob={jumpToJobBoard}
             studentIdentity={effectiveIdentity}
