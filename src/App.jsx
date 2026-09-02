@@ -64,15 +64,32 @@ function parseScheduleText(text, mondayISO) {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   const jobs = [];
   let offset = null;
+  let explicitDate = null; // Date, when the header itself has a real date like "Monday-9/7"
+
   lines.forEach((line) => {
-    const key = line.toLowerCase().replace(/[:\s]+$/, "");
-    if (DAY_OFFSET.hasOwnProperty(key)) {
-      offset = DAY_OFFSET[key];
+    const lower = line.toLowerCase();
+    // Match a day name at the START of the line, regardless of whatever follows
+    // it (a colon, a dash, a date like "-9/7", extra spaces...).
+    const dayKey = Object.keys(DAY_OFFSET).find((day) => lower.startsWith(day));
+    if (dayKey) {
+      offset = DAY_OFFSET[dayKey];
+      explicitDate = null;
+      const dateMatch = line.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+      if (dateMatch) {
+        const mm = parseInt(dateMatch[1], 10);
+        const dd = parseInt(dateMatch[2], 10);
+        if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) explicitDate = new Date(SEASON_YEAR, mm - 1, dd);
+      }
       return;
     }
-    if (offset === null) return;
-    const eventDate = new Date(monday);
-    eventDate.setDate(eventDate.getDate() + offset);
+    if (offset === null && !explicitDate) return;
+    let eventDate;
+    if (explicitDate) {
+      eventDate = explicitDate;
+    } else {
+      eventDate = new Date(monday);
+      eventDate.setDate(eventDate.getDate() + offset);
+    }
     const due = new Date(eventDate);
     due.setDate(due.getDate() - 2); // 48 hours before the event
     jobs.push({
@@ -157,6 +174,14 @@ function getRoleFills(stream, role) {
 }
 function getRoleSlots(stream, role) {
   return (stream.roleSlots && stream.roleSlots[role]) || 1;
+}
+// Which positions (if any) are open for sign-up on this event — fully independent
+// of whether it's categorized Livestream or Content Only. Content Only events
+// default to open call (no positions) unless specific ones were deliberately added.
+function getEffectiveOpenRoles(stream) {
+  if (Array.isArray(stream.openRoles)) return stream.openRoles;
+  if (stream.openSignup) return []; // legacy content-only events: open call, no positions
+  return stream.needsVideoBoard ? ALL_ROLES : ROLES; // legacy broadcast events
 }
 
 const SPECIAL_EVENT_SPORT = "Special Event";
@@ -288,12 +313,10 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
   const [rating, setRating] = useState({ video: 0, audio: 0, commentary: 0, overall: 0 });
   const [notes, setNotes] = useState("");
 
-  const roleList = Array.isArray(stream.openRoles)
-    ? stream.openRoles
-    : (stream.needsVideoBoard ? [...ROLES, VIDEO_BOARD_ROLE] : ROLES);
+  const roleList = getEffectiveOpenRoles(stream);
   const totalSlots = roleList.reduce((sum, r) => sum + getRoleSlots(stream, r), 0);
   const filledCount = roleList.reduce((sum, r) => sum + getRoleFills(stream, r).length, 0);
-  const isOpenCall = stream.openSignup;
+  const isOpenCall = roleList.length === 0;
   const dotColor = isOpenCall ? "#F2A93B" : meta.color;
   const labelColor = isOpenCall ? "#A66A08" : meta.text;
   const statusLabel = isOpenCall ? "Open Call" : meta.label;
@@ -402,10 +425,10 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
           {isOpenCall ? (
             <div>
               <div className="text-[10px] uppercase tracking-[0.15em] text-[#14171C] mb-1" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                Open Camera Night — Sign Up
+                Open Call — Sign Up
               </div>
               <p className="text-xs text-[#6B7280] mb-3">
-                No broadcast this night — I'd like everyone available to sign up. I'll have cameras there to get content and get familiar with them. We have one week before our first home game.
+                No specific positions set for this one — anyone available is welcome to sign up.
               </p>
               {studentIdentity && stream.attendees.some((a) => a.name === studentIdentity.name) ? (
                 <p className="text-xs text-[#178A5E]">You're signed up, {studentIdentity.name}.</p>
@@ -1690,9 +1713,7 @@ function buildEditForm(s) {
     customTitle: isSpecial ? s.title : "",
     opponent: s.opponent, site: s.site, date: s.date, time: s.time,
     kind: s.openSignup ? "content" : "broadcast",
-    openRoles: Array.isArray(s.openRoles)
-      ? s.openRoles
-      : (s.needsVideoBoard ? ALL_ROLES : ROLES),
+    openRoles: getEffectiveOpenRoles(s),
     roleSlots: s.roleSlots || Object.fromEntries(ALL_ROLES.map((r) => [r, 1])),
     includeInBoard: s.includeInBoard !== false,
     status: s.status || "upcoming",
@@ -2406,7 +2427,9 @@ function AdminPanel({
             id: "ev" + Date.now() + Math.random().toString(36).slice(2, 7),
             sportKey, title, opponent, site, date, time,
             openSignup: kind === "content",
-            needsVideoBoard, openRoles: needsVideoBoard ? ALL_ROLES : ROLES, includeInBoard,
+            needsVideoBoard,
+            openRoles: kind === "content" ? [] : (needsVideoBoard ? ALL_ROLES : ROLES),
+            includeInBoard,
             status: "upcoming", roles: { ...emptyRoles }, evaluations: [], attendees: [],
           });
           added++;
@@ -2455,6 +2478,19 @@ function AdminPanel({
       includeInBoard: editingId ? f.includeInBoard : site === "Home",
       openRoles: editingId ? f.openRoles : (site === "Home" ? [...ROLES] : []),
       kind: editingId ? f.kind : (site === "Home" ? "broadcast" : "content"),
+    }));
+  };
+
+  // Category (Livestream/Content Only) is just the calendar color — it's fully
+  // independent of positions. Switching to Content Only on a new event clears
+  // positions back to a plain open call by default; switching to Livestream
+  // restores the full position list. Editing an existing event never
+  // auto-resets positions — only the person editing chooses to change them.
+  const setKind = (kind) => {
+    setForm((f) => ({
+      ...f,
+      kind,
+      openRoles: editingId ? f.openRoles : (kind === "broadcast" ? [...ROLES] : []),
     }));
   };
 
@@ -2739,26 +2775,25 @@ function AdminPanel({
 
             <div className="flex flex-col gap-1.5 pt-1">
               <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                Sign-Up Type
+                Category (Calendar Color — separate from positions below)
               </span>
               <label className="flex items-center gap-2 text-xs text-[#14171C]">
                 <input
                   type="radio" name="kind" checked={form.kind === "broadcast"}
-                  onChange={() => setForm((f) => ({ ...f, kind: "broadcast" }))}
+                  onChange={() => setKind("broadcast")}
                 />
-                Crew role sign-up (specific positions, listed below)
+                Livestream <span style={{ color: "#ED1C24" }}>(red on calendar)</span>
               </label>
               <label className="flex items-center gap-2 text-xs text-[#14171C]">
                 <input
                   type="radio" name="kind" checked={form.kind === "content"}
-                  onChange={() => setForm((f) => ({ ...f, kind: "content" }))}
+                  onChange={() => setKind("content")}
                 />
-                Open call sign-up (anyone adds their own name — no fixed positions)
+                Content Only <span style={{ color: "#14171C" }}>(black on calendar)</span>
               </label>
             </div>
 
-            {form.kind === "broadcast" && (
-              <div className="rounded border px-2.5 py-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
+            <div className="rounded border px-2.5 py-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                     Open Positions for This Event ({form.openRoles.length} of {ALL_ROLES.length} open)
@@ -2769,7 +2804,7 @@ function AdminPanel({
                   </div>
                 </div>
                 <p className="text-[10px] text-[#6B7280] mb-1.5">
-                  Uncheck everything to keep sign-up available but show zero open positions until you add specific ones — handy for away games you only sometimes cover.
+                  Leave everything unchecked for a plain open call (anyone signs up with their own name, no fixed roles) — the default for Content Only events. Check specific positions on any event, Livestream or Content Only, to switch it to structured crew sign-up instead.
                 </p>
                 <div className="grid grid-cols-1 gap-1.5">
                   {ALL_ROLES.map((role) => (
@@ -2794,7 +2829,6 @@ function AdminPanel({
                   ))}
                 </div>
               </div>
-            )}
 
             <div className="rounded border px-2.5 py-2" style={{ borderColor: "#E2E5EA", backgroundColor: "#EEF1F4" }}>
               <span className="text-[10px] uppercase tracking-wide text-[#6B7280]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Status</span>
