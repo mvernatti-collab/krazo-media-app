@@ -165,6 +165,7 @@ const TABS = [
   { key: "calendar", label: "Calendar", shortLabel: "Calendar", icon: Calendar },
   { key: "live", label: "Stream Board", shortLabel: "Streams", icon: Camera },
   { key: "content", label: "Content Board", shortLabel: "Content", icon: Clapperboard },
+  { key: "focus", label: "Focus", shortLabel: "Focus", icon: ListChecks },
   { key: "links", label: "Links", shortLabel: "Links", icon: ExternalLink },
 ];
 const SPORT_ABBR = { Football: "FB", Volleyball: "VB", "Boys Soccer": "SOC", Softball: "SB", [SPECIAL_EVENT_SPORT]: "EVT" };
@@ -342,14 +343,12 @@ function StreamCard({ stream, expanded, onToggle, onClaim, onRelease, onSubmitEv
               {stream.title}
             </h3>
             <span className="text-xs text-[#14171C]">{stream.opponent}</span>
-            {isOpenCall && (
-              <span
-                className="text-[9px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded"
-                style={{ color: "#A66A08", backgroundColor: "#F2A93B22", fontFamily: "'IBM Plex Mono', monospace" }}
-              >
-                Not Streamed
-              </span>
-            )}
+            <span
+              className="text-[9px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded"
+              style={{ color: "#FFFFFF", backgroundColor: CATEGORY_COLORS[eventCategory(stream)], fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              {CATEGORY_LABELS[eventCategory(stream)]} · {stream.site === "Home" ? "H" : "A"}
+            </span>
           </div>
           <div className="flex items-center gap-3 mt-0.5 text-[11px] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
             <span className="flex items-center gap-1"><Calendar size={11} />{stream.date} · {stream.time}</span>
@@ -1333,7 +1332,7 @@ function CalendarView({ streams, onSelectStream, onEditStream, accessLevel }) {
 
 const AUDIENCE_LABELS = { all: "Everyone", krazo: "Krazo Only", dm: "Digital Media Only" };
 
-function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onClearForNewWeek, onJumpToEvent, onJumpToJob, studentIdentity }) {
+function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onClearForNewWeek, onJumpToEvent, onJumpToJob, studentIdentity, readOnly }) {
   const [text, setText] = useState("");
   const [linkedStreamId, setLinkedStreamId] = useState("");
   const [linkedJobId, setLinkedJobId] = useState("");
@@ -1376,48 +1375,52 @@ function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onCle
         </div>
       </div>
 
-      <div className="rounded-md border px-3 py-3 space-y-2 mb-4" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
-        <input
-          value={text} onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="Something to bring up or keep an eye on..."
-          className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
-          style={{ borderColor: "#E2E5EA" }}
-        />
-        <div className="flex gap-2">
-          <select
-            value={linkedStreamId} onChange={(e) => setLinkedStreamId(e.target.value)}
-            className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+      {readOnly ? (
+        <p className="text-xs text-[#6B7280] mb-4">What the team's focused on this week — your producer keeps this list updated.</p>
+      ) : (
+        <div className="rounded-md border px-3 py-3 space-y-2 mb-4" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+          <input
+            value={text} onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="Something to bring up or keep an eye on..."
+            className="w-full bg-[#EEF1F4] border rounded px-3 py-2 text-sm text-[#14171C] placeholder-[#6B7280] outline-none"
             style={{ borderColor: "#E2E5EA" }}
+          />
+          <div className="flex gap-2">
+            <select
+              value={linkedStreamId} onChange={(e) => setLinkedStreamId(e.target.value)}
+              className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+              style={{ borderColor: "#E2E5EA" }}
+            >
+              <option value="">Link to event (optional)</option>
+              {streams.map((s) => <option key={s.id} value={s.id}>{s.title} {s.opponent} — {s.date}</option>)}
+            </select>
+            <select
+              value={linkedJobId} onChange={(e) => setLinkedJobId(e.target.value)}
+              className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
+              style={{ borderColor: "#E2E5EA" }}
+            >
+              <option value="">Link to job (optional)</option>
+              {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
+            </select>
+          </div>
+          <button
+            onClick={submit}
+            className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
+            style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
           >
-            <option value="">Link to event (optional)</option>
-            {streams.map((s) => <option key={s.id} value={s.id}>{s.title} {s.opponent} — {s.date}</option>)}
-          </select>
-          <select
-            value={linkedJobId} onChange={(e) => setLinkedJobId(e.target.value)}
-            className="flex-1 bg-[#EEF1F4] border rounded px-2 py-1.5 text-xs text-[#14171C] outline-none"
-            style={{ borderColor: "#E2E5EA" }}
-          >
-            <option value="">Link to job (optional)</option>
-            {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
-          </select>
+            Add to Focus List
+          </button>
         </div>
-        <button
-          onClick={submit}
-          className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded"
-          style={{ backgroundColor: "#E8362E", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
-        >
-          Add to Focus List
-        </button>
-      </div>
+      )}
 
-      {!showArchived && activeCount > 0 && (
+      {!readOnly && !showArchived && activeCount > 0 && (
         <button
-          onClick={() => { if (window.confirm("Clear all active focus items for a new week? They'll move to Archived, not delete.")) onClearForNewWeek(); }}
+          onClick={() => { if (window.confirm("Archive everything currently active so you can start fresh for the next week? Nothing gets deleted — it all moves to Archived.")) onClearForNewWeek(); }}
           className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border mb-3"
           style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
         >
-          Clear for New Week
+          Archive This Week & Start Next
         </button>
       )}
 
@@ -1427,9 +1430,13 @@ function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onCle
           const linkedJob = item.linkedJobId ? jobs.find((j) => j.id === item.linkedJobId) : null;
           return (
             <div key={item.id} className="rounded-md border px-3 py-2.5 flex items-start gap-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
-              <button onClick={() => onToggleDone(item.id, !item.done)} className="mt-0.5 shrink-0">
-                <CheckCircle2 size={16} color={item.done ? "#178A5E" : "#6B7280"} fill={item.done ? "#178A5E22" : "none"} />
-              </button>
+              {readOnly ? (
+                <CheckCircle2 size={16} color={item.done ? "#178A5E" : "#6B7280"} fill={item.done ? "#178A5E22" : "none"} className="mt-0.5 shrink-0" />
+              ) : (
+                <button onClick={() => onToggleDone(item.id, !item.done)} className="mt-0.5 shrink-0">
+                  <CheckCircle2 size={16} color={item.done ? "#178A5E" : "#6B7280"} fill={item.done ? "#178A5E22" : "none"} />
+                </button>
+              )}
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-[#14171C]" style={item.done ? { textDecoration: "line-through", color: "#6B7280" } : {}}>
                   {item.text}
@@ -1447,9 +1454,11 @@ function FocusBoard({ items, streams, jobs, onAdd, onToggleDone, onDelete, onCle
                   )}
                 </div>
               </div>
-              <button onClick={() => onDelete(item.id)} className="text-[#6B7280] hover:text-[#C42B22] shrink-0">
-                <Trash2 size={13} />
-              </button>
+              {!readOnly && (
+                <button onClick={() => onDelete(item.id)} className="text-[#6B7280] hover:text-[#C42B22] shrink-0">
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
           );
         })}
@@ -1648,12 +1657,86 @@ function buildEditForm(s) {
   };
 }
 
+function DmSignupDetail({ slot, weekId, person, onMoveStage, onUpdateLinks, canEdit }) {
+  const [newLink, setNewLink] = useState("");
+  const stageIdx = Math.max(0, STAGES.findIndex((s) => s.key === (person.stage || "requested")));
+  const links = person.links || [];
+
+  const addLink = () => {
+    const v = newLink.trim();
+    if (!v) return;
+    onUpdateLinks(weekId, slot.id, person.name, [...links, v]);
+    setNewLink("");
+  };
+  const removeLink = (i) => onUpdateLinks(weekId, slot.id, person.name, links.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="rounded border px-2.5 py-2 space-y-1.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#FFFFFF" }}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-[#14171C]">{person.name}</span>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            disabled={stageIdx === 0 || !canEdit}
+            onClick={() => onMoveStage(weekId, slot.id, person.name, -1)}
+            className="disabled:opacity-20 text-[#14171C]"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span
+            className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded"
+            style={{ color: STAGES[stageIdx].text, backgroundColor: STAGES[stageIdx].color + "22", fontFamily: "'IBM Plex Mono', monospace" }}
+          >
+            {STAGES[stageIdx].label}
+          </span>
+          <button
+            disabled={stageIdx === STAGES.length - 1 || !canEdit}
+            onClick={() => onMoveStage(weekId, slot.id, person.name, 1)}
+            className="disabled:opacity-20 text-[#14171C]"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+      {links.map((url, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <Link2 size={11} className="text-[#14171C] shrink-0" />
+          <a
+            href={/^https?:\/\//i.test(url) ? url : `https://${url}`}
+            target="_blank" rel="noopener noreferrer"
+            className="flex-1 min-w-0 truncate text-[11px] text-[#1D6FBD] underline"
+            style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+          >
+            {url}
+          </a>
+          {canEdit && (
+            <button onClick={() => removeLink(i)} className="text-[#6B7280] hover:text-[#E8362E] shrink-0"><X size={11} /></button>
+          )}
+        </div>
+      ))}
+      {canEdit && (
+        <div className="flex items-center gap-1.5">
+          <Link2 size={11} className="text-[#6B7280] shrink-0" />
+          <input
+            value={newLink}
+            onChange={(e) => setNewLink(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addLink()}
+            onBlur={addLink}
+            placeholder={links.length === 0 ? "Paste your graphic link, press Enter..." : "Add another link..."}
+            className="w-full bg-transparent border-b text-[11px] text-[#1D6FBD] placeholder-[#6B7280] outline-none pb-0.5"
+            style={{ borderColor: "#E2E5EA", fontFamily: "'IBM Plex Mono', monospace" }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DigitalMediaAdmin({
   sections, roster, weeks,
   onAddSection, onDeleteSection,
   onAddRosterEntry, onAddRosterEntries, onDeleteRosterEntry,
   onPublishWeek, onUpdateWeek, onArchiveWeek, onDeleteWeek,
-  onClaimSlot, onReleaseSlot,
+  onClaimSlot, onReleaseSlot, onMoveStage, onUpdateLinks,
 }) {
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [dmSubTab, setDmSubTab] = useState("sheet"); // 'sheet' | 'roster' | 'dashboard'
@@ -1904,12 +1987,25 @@ function DigitalMediaAdmin({
                           </div>
                         </div>
                         {(slot.signups || []).length > 0 && (
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="space-y-1.5">
                             {(slot.signups || []).map((p) => (
-                              <span key={p.name} className="flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-[#EEF1F4] border border-[#E2E5EA] text-[#14171C]">
-                                {p.name}
-                                <button onClick={() => onReleaseSlot(activeWeek.id, slot.id, p.name)} className="text-[#6B7280] hover:text-[#E8362E]"><X size={10} /></button>
-                              </span>
+                              <div key={p.name} className="space-y-1">
+                                <DmSignupDetail
+                                  slot={slot}
+                                  weekId={activeWeek.id}
+                                  person={p}
+                                  onMoveStage={onMoveStage}
+                                  onUpdateLinks={onUpdateLinks}
+                                  canEdit={true}
+                                />
+                                <button
+                                  onClick={() => onReleaseSlot(activeWeek.id, slot.id, p.name)}
+                                  className="text-[10px] uppercase tracking-wide text-[#6B7280] hover:text-[#E8362E]"
+                                  style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                                >
+                                  Remove {p.name} from this slot
+                                </button>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -2050,14 +2146,13 @@ function AdminPanel({
   onAddDmSection, onDeleteDmSection,
   onAddDmRosterEntry, onAddDmRosterEntries, onDeleteDmRosterEntry,
   onPublishDmWeek, onUpdateDmWeek, onArchiveDmWeek, onDeleteDmWeek,
-  onClaimDmSlot, onReleaseDmSlot,
+  onClaimDmSlot, onReleaseDmSlot, onMoveDmSignupStage, onUpdateDmSignupLinks,
   reminderHours, onUpdateReminderHours, adminName, onUpdateAdminName,
+  dismissedCategoryFix, dismissedPositionsFix, onUpdateDismissedFixes,
   initialEditId, onConsumedInitialEdit,
 }) {
   const [adminTab, setAdminTab] = useState("schedule");
   const [scheduleSortBy, setScheduleSortBy] = useState("date"); // 'date' | 'type' | 'sport'
-  const [dismissedCategoryFix, setDismissedCategoryFix] = useState(false);
-  const [dismissedPositionsFix, setDismissedPositionsFix] = useState(false);
   const [editingId, setEditingId] = useState(() => {
     if (!initialEditId) return null;
     return streams.some((s) => s.id === initialEditId) ? initialEditId : null;
@@ -2413,7 +2508,7 @@ function AdminPanel({
                 <div className="text-[10px] uppercase tracking-[0.15em] text-[#14171C]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                   Quick Fix — Calendar Color
                 </div>
-                <button onClick={() => setDismissedCategoryFix(true)} className="text-[#6B7280] hover:text-[#14171C]"><X size={14} /></button>
+                <button onClick={() => onUpdateDismissedFixes({ category: true })} className="text-[#6B7280] hover:text-[#14171C]"><X size={14} /></button>
               </div>
               <p className="text-[11px] text-[#14171C]">
                 {awayMarkedLivestream.length} away game{awayMarkedLivestream.length === 1 ? " is" : "s are"} still marked Livestream, so they show up red on the Calendar even though they're not being broadcast. If you only cover a handful of these (like varsity football), it's totally fine to dismiss this and just fix those specific ones by hand — this button is only here in case you'd rather clean them all up at once.
@@ -2434,7 +2529,7 @@ function AdminPanel({
                 <div className="text-[10px] uppercase tracking-[0.15em] text-[#ED1C24]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                   Quick Fix — Positions
                 </div>
-                <button onClick={() => setDismissedPositionsFix(true)} className="text-[#6B7280] hover:text-[#ED1C24]"><X size={14} /></button>
+                <button onClick={() => onUpdateDismissedFixes({ positions: true })} className="text-[#6B7280] hover:text-[#ED1C24]"><X size={14} /></button>
               </div>
               <p className="text-[11px] text-[#14171C]">
                 {awayWithOpenPositions.length} away game{awayWithOpenPositions.length === 1 ? " has" : "s have"} open crew positions students can sign up for, even though nothing's actually being covered. This is entirely optional — dismiss it if you're only actively managing a few events (like varsity football) and don't need to bulk-clean the rest.
@@ -2925,6 +3020,8 @@ function AdminPanel({
               onDeleteWeek={onDeleteDmWeek}
               onClaimSlot={onClaimDmSlot}
               onReleaseSlot={onReleaseDmSlot}
+              onMoveStage={onMoveDmSignupStage}
+              onUpdateLinks={onUpdateDmSignupLinks}
             />
           )}
 
@@ -3039,6 +3136,26 @@ function AdminPanel({
               style={{ backgroundColor: "#1D6FBD", color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace" }}
             >
               {codesSaved ? "Saved ✓" : "Save Codes"}
+            </button>
+          </div>
+
+          {/* Quick Fix alerts */}
+          <div className="rounded border px-3 py-3 space-y-2.5" style={{ borderColor: "#E2E5EA", backgroundColor: "#F6F7F9" }}>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-[#6B7280] flex items-center gap-1.5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+              <ListChecks size={12} /> Quick Fix Alerts
+            </div>
+            <p className="text-[11px] text-[#6B7280]">
+              {dismissedCategoryFix || dismissedPositionsFix
+                ? "You've dismissed one or both of the away-game nudges on the Schedule tab. Bring them back if you want a fresh sweep before next season."
+                : "Both away-game nudges are currently active on the Schedule tab."}
+            </p>
+            <button
+              onClick={() => onUpdateDismissedFixes({ category: false, positions: false })}
+              disabled={!dismissedCategoryFix && !dismissedPositionsFix}
+              className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border disabled:opacity-40"
+              style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              Show Quick Fix Alerts Again
             </button>
           </div>
           </>
@@ -3163,7 +3280,7 @@ function StudentSignInModal({ roster, onSignIn, onClose }) {
   );
 }
 
-function DigitalMediaView({ identity, sections, weeks, links, onClaim, onRelease, onLogout }) {
+function DigitalMediaView({ identity, sections, weeks, links, onClaim, onRelease, onMoveStage, onUpdateLinks, onLogout }) {
   const section = sections.find((s) => s.id === identity.sectionId);
   const week = weeks.find((w) => w.sectionId === identity.sectionId && !w.archived);
   const [showLinks, setShowLinks] = useState(false);
@@ -3254,9 +3371,9 @@ function DigitalMediaView({ identity, sections, weeks, links, onClaim, onRelease
                         {signups.length}/{slot.cap}
                       </span>
                     </div>
-                    {signups.length > 0 && (
+                    {signups.filter((p) => p.name !== identity.name).length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
-                        {signups.map((p) => (
+                        {signups.filter((p) => p.name !== identity.name).map((p) => (
                           <span key={p.name} className="text-[11px] px-1.5 py-0.5 rounded bg-[#EEF1F4] border border-[#E2E5EA] text-[#14171C]">
                             {p.name}
                           </span>
@@ -3264,13 +3381,23 @@ function DigitalMediaView({ identity, sections, weeks, links, onClaim, onRelease
                       </div>
                     )}
                     {alreadyIn ? (
-                      <button
-                        onClick={() => onRelease(week.id, slot.id, identity.name)}
-                        className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border"
-                        style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
-                      >
-                        Remove My Sign-Up
-                      </button>
+                      <>
+                        <DmSignupDetail
+                          slot={slot}
+                          weekId={week.id}
+                          person={signups.find((p) => p.name === identity.name)}
+                          onMoveStage={onMoveStage}
+                          onUpdateLinks={onUpdateLinks}
+                          canEdit={true}
+                        />
+                        <button
+                          onClick={() => onRelease(week.id, slot.id, identity.name)}
+                          className="text-xs uppercase tracking-wide font-medium px-3 py-1.5 rounded border"
+                          style={{ borderColor: "#E2E5EA", color: "#6B7280", fontFamily: "'IBM Plex Mono', monospace" }}
+                        >
+                          Remove My Sign-Up
+                        </button>
+                      </>
                     ) : (
                       <button
                         onClick={() => canClaim && onClaim(week.id, slot.id, identity.name)}
@@ -3303,6 +3430,7 @@ function AppInner() {
   const [showSignIn, setShowSignIn] = useState(false);
   const [passcodes, setPasscodesLocal] = useState({ student: "TIGERS2026", admin: "KRAZOADMIN" });
   const [adminName, setAdminNameLocal] = useState("Producer");
+  const [dismissedFixes, setDismissedFixesLocal] = useState({ category: false, positions: false });
   const [reminderHours, setReminderHoursLocal] = useState(24);
   const [tab, setTab] = useState("calendar");
   const [streams, setStreams] = useState([]);
@@ -3385,7 +3513,7 @@ function AppInner() {
           (sum, s) => sum + (s.signups || []).filter((p) => p.name === studentName).length, 0
         );
         if (totalForStudent >= (data.quota || 1)) return; // already at quota
-        const newSlots = slots.map((s, i) => (i === slotIdx ? { ...s, signups: [...signups, { name: studentName }] } : s));
+        const newSlots = slots.map((s, i) => (i === slotIdx ? { ...s, signups: [...signups, { name: studentName, stage: "requested", links: [] }] } : s));
         tx.update(ref, { slots: newSlots });
       });
     } catch (err) {
@@ -3412,6 +3540,34 @@ function AppInner() {
     } catch (err) {
       console.error("releaseDmSlot failed:", err);
     }
+  };
+
+  const moveDmSignupStage = (weekId, slotId, studentName, dir) => {
+    const week = dmWeeks.find((w) => w.id === weekId);
+    if (!week) return;
+    const newSlots = (week.slots || []).map((s) => {
+      if (s.id !== slotId) return s;
+      return {
+        ...s,
+        signups: (s.signups || []).map((p) => {
+          if (p.name !== studentName) return p;
+          const idx = STAGES.findIndex((st) => st.key === (p.stage || "requested"));
+          const next = Math.min(Math.max(idx + dir, 0), STAGES.length - 1);
+          return { ...p, stage: STAGES[next].key };
+        }),
+      };
+    });
+    updateDmWeek(weekId, { slots: newSlots });
+  };
+
+  const updateDmSignupLinks = (weekId, slotId, studentName, links) => {
+    const week = dmWeeks.find((w) => w.id === weekId);
+    if (!week) return;
+    const newSlots = (week.slots || []).map((s) => {
+      if (s.id !== slotId) return s;
+      return { ...s, signups: (s.signups || []).map((p) => (p.name === studentName ? { ...p, links } : p)) };
+    });
+    updateDmWeek(weekId, { slots: newSlots });
   };
 
   // Signing in as admin drops you straight into your own Admin tab instead of
@@ -3475,6 +3631,7 @@ function AppInner() {
         if (data.passcodes) setPasscodesLocal(data.passcodes);
         if (typeof data.reminderHours === "number") setReminderHoursLocal(data.reminderHours);
         if (data.adminName) setAdminNameLocal(data.adminName);
+        if (data.dismissedFixes) setDismissedFixesLocal(data.dismissedFixes);
       }),
     ];
     return () => unsubs.forEach((u) => u());
@@ -3524,6 +3681,8 @@ function AppInner() {
         links={links}
         onClaim={claimDmSlot}
         onRelease={releaseDmSlot}
+        onMoveStage={moveDmSignupStage}
+        onUpdateLinks={updateDmSignupLinks}
         onLogout={() => { setAccessLevel(null); setStudentIdentity(null); }}
       />
     );
@@ -3660,6 +3819,8 @@ function AppInner() {
   const setPasscodes = (newPasscodes) => setDoc(doc(db, "settings", "app"), { passcodes: newPasscodes }, { merge: true });
   const setReminderHours = (n) => setDoc(doc(db, "settings", "app"), { reminderHours: n }, { merge: true });
   const setAdminName = (name) => setDoc(doc(db, "settings", "app"), { adminName: name }, { merge: true });
+  const updateDismissedFixes = (patch) =>
+    setDoc(doc(db, "settings", "app"), { dismissedFixes: { ...dismissedFixes, ...patch } }, { merge: true });
 
   // Admins act under their own name without ever needing a student PIN.
   // Students still go through the sign-in modal (name + PIN) as before.
@@ -3667,7 +3828,7 @@ function AppInner() {
 
   const liveCount = streams.filter((s) => s.status === "live").length;
   const visibleTabs = accessLevel === "admin"
-    ? [...TABS, { key: "focus", label: "Focus", shortLabel: "Focus", icon: ListChecks }, { key: "admin", label: "Admin", shortLabel: "Admin", icon: Settings }]
+    ? [...TABS, { key: "admin", label: "Admin", shortLabel: "Admin", icon: Settings }]
     : TABS;
 
   return (
@@ -3957,7 +4118,7 @@ function AppInner() {
           <LinksView links={links} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} studentIdentity={effectiveIdentity} onRequireSignIn={requireSignIn} accessLevel={accessLevel} viewerAudience="krazo" />
         )}
 
-        {tab === "focus" && accessLevel === "admin" && (
+        {tab === "focus" && (
           <FocusBoard
             items={focusItems}
             streams={streams}
@@ -3969,6 +4130,7 @@ function AppInner() {
             onJumpToEvent={jumpToEvent}
             onJumpToJob={jumpToJobBoard}
             studentIdentity={effectiveIdentity}
+            readOnly={accessLevel !== "admin"}
           />
         )}
 
@@ -4001,10 +4163,15 @@ function AppInner() {
             onDeleteDmWeek={deleteDmWeek}
             onClaimDmSlot={claimDmSlot}
             onReleaseDmSlot={releaseDmSlot}
+            onMoveDmSignupStage={moveDmSignupStage}
+            onUpdateDmSignupLinks={updateDmSignupLinks}
             reminderHours={reminderHours}
             onUpdateReminderHours={setReminderHours}
             adminName={adminName}
             onUpdateAdminName={setAdminName}
+            dismissedCategoryFix={dismissedFixes.category}
+            dismissedPositionsFix={dismissedFixes.positions}
+            onUpdateDismissedFixes={updateDismissedFixes}
             initialEditId={pendingEditId}
             onConsumedInitialEdit={() => setPendingEditId(null)}
           />
