@@ -86,7 +86,7 @@ function parseScheduleText(text, mondayISO) {
       if (dateMatch) {
         const mm = parseInt(dateMatch[1], 10);
         const dd = parseInt(dateMatch[2], 10);
-        if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) explicitDate = new Date(SEASON_YEAR, mm - 1, dd);
+        if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) explicitDate = new Date(yearForMonth(mm - 1), mm - 1, dd);
       }
       continue;
     }
@@ -133,11 +133,22 @@ function parseScheduleText(text, mondayISO) {
   return jobs;
 }
 
-const SEASON_YEAR = 2026;
+// The app stores dates as "MMM D" with no year (e.g. "Sep 4"), because a
+// school year spans a calendar-year rollover (fall sports in 2026, winter/
+// spring sports in 2027). SEASON_START_YEAR is the year the school year
+// *begins* (August). Any month from August (index 7) through December
+// belongs to that start year; January through July belongs to the year
+// after. yearForMonth() resolves the right year for a given month so this
+// works correctly across the whole school year, not just the fall.
+const SEASON_START_YEAR = 2026;
+function yearForMonth(monthIdx) {
+  return monthIdx >= 7 ? SEASON_START_YEAR : SEASON_START_YEAR + 1;
+}
 
 function parseStreamDate(dateStr) {
   const [mon, day] = dateStr.split(" ");
-  return new Date(SEASON_YEAR, MONTHS.indexOf(mon), parseInt(day, 10));
+  const idx = MONTHS.indexOf(mon);
+  return new Date(yearForMonth(idx), idx, parseInt(day, 10));
 }
 function parseStreamDateTime(s) {
   const base = parseStreamDate(s.date).getTime();
@@ -177,7 +188,7 @@ function toDateInputValue(mmmD) {
   const idx = MONTHS.indexOf(parts[0]);
   const day = parseInt(parts[1], 10);
   if (idx === -1 || isNaN(day)) return "";
-  return `${SEASON_YEAR}-${String(idx + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return `${yearForMonth(idx)}-${String(idx + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 // Converts a native date-input value "2026-09-04" back to "Sep 4" for storage,
 // so the rest of the app (sorting, archiving) keeps working with one consistent format.
@@ -224,11 +235,15 @@ const TABS = [
   { key: "focus", label: "Focus", shortLabel: "Focus", icon: ListChecks },
   { key: "links", label: "Links", shortLabel: "Links", icon: ExternalLink },
 ];
-const SPORT_ABBR = { Football: "FB", Volleyball: "VB", "Boys Soccer": "SOC", Softball: "SB", [SPECIAL_EVENT_SPORT]: "EVT" };
+const SPORT_ABBR = {
+  Football: "FB", Volleyball: "VB", "Boys Soccer": "SOC", Softball: "SB",
+  "Basketball (Boys)": "BBB", "Basketball (Girls)": "GBB",
+  [SPECIAL_EVENT_SPORT]: "EVT",
+};
 function sportAbbr(sportKey) {
   return SPORT_ABBR[sportKey] || sportKey.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase();
 }
-const SPORT_ORDER = ["Football", "Volleyball", "Boys Soccer", "Softball"];
+const SPORT_ORDER = ["Football", "Volleyball", "Boys Soccer", "Softball", "Basketball (Boys)", "Basketball (Girls)"];
 function sportOrderIndex(sportKey) {
   const i = SPORT_ORDER.indexOf(sportKey);
   return i === -1 ? 999 : i;
@@ -2430,6 +2445,7 @@ function AdminPanel({
       "category,sport,title,opponent,site,date,time,kind,needsvideoboard,includeinboard",
       "sport,Football,,vs Neosho,Home,Aug 28,7:00 PM,broadcast,true,true",
       "sport,Volleyball,,at Willard,Away,Sep 10,7:30 PM,broadcast,false,false",
+      "sport,Basketball (Boys),JV Boys Basketball,at Willard,Away,Feb 5,4:30 PM,content,false,false",
       "special,,Meet the Tigers,Fall festival at the stadium,Home,Aug 15,5:00 PM,content,false,true",
     ].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -2472,7 +2488,7 @@ function AdminPanel({
             sportKey = (row.sport || "").trim();
             opponent = (row.opponent || "").trim();
             if (!sportKey || !opponent) { skipped++; return; }
-            title = `Varsity ${sportKey}`;
+            title = (row.title || "").trim() || `Varsity ${sportKey}`;
           }
 
           onAdd({
