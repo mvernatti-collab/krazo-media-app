@@ -2986,7 +2986,7 @@ function AdminPanel({
               </div>
             </div>
             <p className="text-[10px] text-[#6B7280] mb-2">Past and completed events always sink to the bottom, regardless of sort.</p>
-            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            <div className="space-y-1.5 max-h-[32rem] overflow-y-auto pr-1">
               {sortedStreams.map((s) => {
                 const past = s.status === "complete" || isPastDate(s);
                 return (
@@ -3016,6 +3016,16 @@ function AdminPanel({
                     >
                       {s.includeInBoard ? "On Board" : "Calendar Only"}
                     </span>
+                    {s.status === "complete" && !isPastDate(s) && (
+                      <button
+                        onClick={() => onUpdate(s.id, { status: "upcoming" })}
+                        title="This was auto-marked Complete but its date isn't actually in the past — click to reopen it"
+                        className="text-[9px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded"
+                        style={{ color: "#A66A08", backgroundColor: "#F2A93B22", fontFamily: "'IBM Plex Mono', monospace" }}
+                      >
+                        Reopen
+                      </button>
+                    )}
                     <button onClick={() => startEdit(s)} className="text-[#6B7280] hover:text-[#1D6FBD]"><Pencil size={14} /></button>
                     <button onClick={() => onDelete(s.id)} className="text-[#6B7280] hover:text-[#C42B22]"><Trash2 size={14} /></button>
                   </div>
