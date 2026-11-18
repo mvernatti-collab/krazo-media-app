@@ -153,6 +153,23 @@ const num = (v, lo, hi) => { const n = parseFloat(v); return Number.isFinite(n) 
 //   sb=top|top-left|top-right|bottom|bottom-left|bottom-right   scoreboard corner
 //   sbx, sby     nudge the scoreboard        sbscale   resize it (e.g. 0.8)
 //   cardx, cardy nudge stat cards           cardscale resize them
+// Test switches: &off=clip,grad,img,radius,shadow,op,pos (or all) turn drawing
+// features off everywhere, to find what PT's hidden output copy drops.
+const OFF = {
+  clip: "*,*::before,*::after{clip-path:none!important;-webkit-clip-path:none!important}",
+  grad: "*,*::before,*::after{background-image:none!important}",
+  img: "img{display:none!important}",
+  radius: "*,*::before,*::after{border-radius:0!important}",
+  shadow: "*,*::before,*::after{box-shadow:none!important;text-shadow:none!important}",
+  op: "*,*::before,*::after{opacity:1!important}",
+  pos: "#stack{position:absolute!important;top:24px!important;z-index:9!important}",
+};
+export function offCss(v) {
+  const keys = String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const list = keys.includes("all") ? Object.keys(OFF) : keys.filter((k) => OFF[k]);
+  return list.length ? `<style id="krazo-off">${list.map((k) => OFF[k]).join("")}</style>` : "";
+}
+
 export function placementCss(o = {}) {
   const css = [];
   const sbx = num(o.sbx, -1900, 1900) || 0, sby = num(o.sby, -1060, 1060) || 0, sbs = num(o.sbscale, 0.2, 3);
@@ -198,7 +215,7 @@ export function transform(html, host, debug, opts = {}) {
   if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, (m) => m + shim);
   else out = shim + out;
   out = applyAnchor(out, opts.sb);
-  const place = placementCss(opts);
+  const place = placementCss(opts) + offCss(opts.off);
   if (/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, noAnim + place + '</head>');
   else out = noAnim + place + out;
   return out;
@@ -216,7 +233,7 @@ export default async function handler(req, res) {
     res.setHeader("content-type", "text/html; charset=utf-8");
     res.setHeader("cache-control", "no-store");
     const q = req.query || {};
-    const opts = { sb: q.sb, sbx: q.sbx, sby: q.sby, sbscale: q.sbscale, cardx: q.cardx, cardy: q.cardy, cardscale: q.cardscale };
+    const opts = { sb: q.sb, sbx: q.sbx, sby: q.sby, sbscale: q.sbscale, cardx: q.cardx, cardy: q.cardy, cardscale: q.cardscale, off: q.off };
     res.status(r.status).send(transform(html, target.host, debug, opts));
   } catch (e) {
     res.status(502).send("Couldn't reach Press Row: " + e.message);
