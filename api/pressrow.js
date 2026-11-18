@@ -118,8 +118,14 @@ export function transform(html, host, debug) {
   out = out.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
   const gm = html.match(/const gameId = "([^"]+)"/);
   const shim = SHIM(debug, gm ? gm[1] : "", prefix);
+  // PT's embedded browser doesn't run CSS animations, and Press Row's graphics
+  // start invisible and fade in, so they stayed invisible. Turn animations and
+  // transitions off so everything shows in its final state immediately.
+  const noAnim = '<style id="krazo-no-anim">*,*::before,*::after{animation:none!important;transition:none!important}</style>';
   if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, (m) => m + shim);
   else out = shim + out;
+  if (/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, noAnim + '</head>');
+  else out = noAnim + out;
   return out;
 }
 
