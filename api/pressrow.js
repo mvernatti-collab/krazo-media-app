@@ -215,7 +215,11 @@ export function transform(html, host, debug, opts = {}) {
   if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, (m) => m + shim);
   else out = shim + out;
   out = applyAnchor(out, opts.sb);
-  const place = placementCss(opts) + offCss(opts.off);
+  // Default for PT: these four features made the scorebug vanish from PT's
+  // overlay output (tested in PT, Nov 2026). &off=none keeps Press Row's look;
+  // &off=<list> overrides.
+  const off = opts.off === undefined || opts.off === "" ? "clip,radius,shadow,op" : opts.off === "none" ? "" : opts.off;
+  const place = placementCss(opts) + offCss(off);
   if (/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, noAnim + place + '</head>');
   else out = noAnim + place + out;
   return out;
