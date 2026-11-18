@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>PT Browser Check</title>
+<style>
+  html, body { margin: 0; background: #111; color: #fff; font-family: -apple-system, Helvetica, Arial, sans-serif; }
+  #wrap { padding: 30px 40px; font-size: 26px; line-height: 1.35; }
+  h1 { margin: 0 0 6px; font-size: 44px; color: #ff3b42; }
+  #ua { font-size: 18px; color: #bbb; margin-bottom: 18px; word-break: break-all; }
+  table { border-collapse: collapse; width: 100%; }
+  td { padding: 5px 12px; border-bottom: 1px solid #333; vertical-align: top; }
+  td.k { width: 46%; color: #ddd; }
+  .ok { color: #3ddc84; font-weight: bold; }
+  .bad { color: #ff4d4d; font-weight: bold; }
+  .wait { color: #ffcf3f; font-weight: bold; }
+  #cols { display: flex; gap: 40px; }
+  #cols > div { flex: 1; }
+  h2 { font-size: 28px; margin: 18px 0 6px; color: #ff9da0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>PT Browser Check</h1>
+  <div id="ua"></div>
+  <div id="cols">
+    <div><h2>Features</h2><table id="feat"></table></div>
+    <div><h2>Live tests (Press Row)</h2><table id="live"></table></div>
+  </div>
+</div>
+<script>
+// Written in old-style JavaScript on purpose, so it runs even in very old browsers.
+var ua = document.getElementById('ua');
+ua.innerHTML = 'UA: ' + navigator.userAgent + '<br>Window: ' + window.innerWidth + '×' + window.innerHeight + ' · DPR ' + (window.devicePixelRatio || 1);
+
+function row(tableId, key, label) {
+  var tr = document.createElement('tr');
+  tr.innerHTML = '<td class="k">' + label + '</td><td id="' + key + '" class="wait">testing…</td>';
+  document.getElementById(tableId).appendChild(tr);
+}
+function set(key, ok, text) {
+  var el = document.getElementById(key);
+  if (!el) return;
+  el.className = ok === null ? 'wait' : (ok ? 'ok' : 'bad');
+  el.innerHTML = text;
+}
+function syntax(code) { try { new Function(code); return true; } catch (e) { return false; } }
+function css(p, v) { try { return !!(window.CSS && CSS.supports && CSS.supports(p, v)); } catch (e) { return false; } }
+
+var feats = [
+  ['f1', 'EventSource (Press Row live stream)', typeof window.EventSource === 'function' || typeof window.EventSource === 'object'],
+  ['f2', 'BroadcastChannel', typeof window.BroadcastChannel !== 'undefined'],
+  ['f3', 'WebSocket', typeof window.WebSocket !== 'undefined'],
+  ['f4', 'fetch', typeof window.fetch === 'function'],
+  ['f5', 'Streaming fetch (Response.body)', typeof window.ReadableStream !== 'undefined'],
+  ['f6', 'ResizeObserver', typeof window.ResizeObserver !== 'undefined'],
+  ['f7', 'AbortController', typeof window.AbortController !== 'undefined'],
+  ['f8', 'Optional chaining a?.b', syntax('var a; return a?.b')],
+  ['f9', 'Nullish ?? operator', syntax('var a; return a ?? 1')],
+  ['f10', 'CSS inset', css('inset', '0')],
+  ['f11', 'CSS custom properties', css('--x', '1')],
+  ['f12', 'ES modules', 'noModule' in document.createElement('script')]
+];
+for (var i = 0; i < feats.length; i++) {
+  row('feat', feats[i][0], feats[i][1]);
+  set(feats[i][0], feats[i][2], feats[i][2] ? 'yes' : 'NO');
+}
+row('feat', 'raf', 'Animation frames (2 sec)');
+row('feat', 'tmr', 'Timer ticks (2 sec)');
+var rafN = 0, tmrN = 0;
+(function loop() { rafN++; if (window.requestAnimationFrame) requestAnimationFrame(loop); })();
+var ti = setInterval(function () { tmrN++; }, 50);
+setTimeout(function () {
+  set('raf', rafN > 30, rafN + ' frames' + (rafN > 30 ? '' : ' (paused or slow)'));
+  set('tmr', tmrN > 20, tmrN + ' ticks');
+  clearInterval(ti);
+}, 2000);
+
+// --- live tests against the Press Row game ---
+var q = {};
+location.search.replace(/[?&]([^=&]+)=([^&]*)/g, function (m, k, v) { q[k] = decodeURIComponent(v); });
+var GAME = q.game || 'MzEyOQ.65-f4J5c_t-sO8BwBTgf-pUru9Y202g6l3yJRLH3_rg';
+var BASE = 'https://hoops.pressrowapps.com';
+row('live', 'l1', 'fetch game JSON (cross-site)');
+row('live', 'l2', 'EventSource: connection');
+row('live', 'l3', 'EventSource: messages received');
+row('live', 'l4', 'Streaming fetch of stream');
+row('live', 'l5', 'Old-style XHR of game JSON');
+
+if (window.fetch) {
+  fetch(BASE + '/api/games/' + GAME + '/json?view=graphics', { cache: 'no-store' })
+    .then(function (r) { return r.json().then(function (d) { set('l1', true, 'HTTP ' + r.status + ' · ' + (d.homeTeam ? d.homeTeam.name + ' ' + d.homeTeam.score + ' – ' + d.awayTeam.name + ' ' + d.awayTeam.score : 'no teams')); }); })
+    .catch(function (e) { set('l1', false, 'failed: ' + e); });
+} else set('l1', false, 'no fetch');
+
+var msgs = 0;
+if (window.EventSource) {
+  try {
+    var es = new EventSource(BASE + '/api/games/' + GAME + '/broadcast-stream');
+    set('l2', null, 'connecting…');
+    es.onopen = function () { set('l2', true, 'open'); };
+    es.onmessage = function () { msgs++; set('l3', true, msgs + ' message(s)'); };
+    es.addEventListener('air', function (ev) { set('l3', true, msgs + ' message(s) · air: ' + ev.data); });
+    es.onerror = function () { set('l2', false, 'error (readyState ' + es.readyState + ')'); };
+  } catch (e) { set('l2', false, 'threw: ' + e); }
+} else { set('l2', false, 'EventSource missing'); set('l3', false, '—'); }
+setTimeout(function () { if (msgs === 0) set('l3', false, 'none after 12 sec'); }, 12000);
+
+if (window.fetch && window.ReadableStream) {
+  var got = 0;
+  fetch(BASE + '/api/games/' + GAME + '/broadcast-stream').then(function (r) {
+    var rd = r.body.getReader();
+    function pump() { return rd.read().then(function (x) { if (x.done) return; got += x.value.length; set('l4', true, got + ' bytes arriving'); return pump(); }); }
+    set('l4', null, 'HTTP ' + r.status + ', waiting for data…');
+    return pump();
+  }).catch(function (e) { set('l4', false, 'failed: ' + e); });
+  setTimeout(function () { if (!got) set('l4', false, 'no data after 12 sec'); }, 12000);
+} else set('l4', false, 'not supported');
+
+try {
+  var x = new XMLHttpRequest();
+  x.open('GET', BASE + '/api/games/' + GAME + '/json?view=graphics');
+  x.onload = function () { set('l5', x.status === 200, 'HTTP ' + x.status); };
+  x.onerror = function () { set('l5', false, 'blocked/failed'); };
+  x.send();
+} catch (e) { set('l5', false, 'threw: ' + e); }
+</script>
+</body>
+</html>
