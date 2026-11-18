@@ -97,9 +97,12 @@ const SHIM = (debug, gameId, prefix) => String.raw`<script>
   function add(s){ log.push(String(s && s.message ? s.message : s).slice(0, 240)); draw(); }
   window.addEventListener('error', function(e){ var t = e.target; if (t && t !== window && t.tagName) { if (t.tagName !== 'IMG') add('could not load ' + t.tagName.toLowerCase()); return; } add((e.message || 'error') + ' @line ' + (e.lineno || '?')); }, true);
   ['error','warn'].forEach(function(k){ var o = console[k]; console[k] = function(){ try { var a = [].slice.call(arguments).map(function(x){ return x && x.stack ? (x.message + ' | ' + String(x.stack).split('\n')[0]) : (x && x.message) || String(x); }); add('console.' + k + ': ' + a.join(' ')); } catch (e) {} return o && o.apply(console, arguments); }; });
+  var rafN = 0; (function f(){ rafN++; if (window.requestAnimationFrame) requestAnimationFrame(f); })();
   function dom(){ var sb = document.getElementById('scoreboard-root'), stg = document.getElementById('gfx-stage'), cs = function(e){ try { return getComputedStyle(e); } catch (x) { return null; } };
     var t = stg ? (cs(stg) || {}).transform : '—';
-    return 'Scoreboard HTML ' + (sb ? sb.innerHTML.length : 'missing') + ' chars · stage ' + (stg ? stg.offsetWidth + '×' + stg.offsetHeight + ' ' + t : 'missing') + ' · page opacity ' + (document.documentElement.style.opacity || '1') + ' · window ' + innerWidth + '×' + innerHeight; }
+    var board = document.querySelector('#sb-region .scoreboard, #sb-region [class*="scoreboard"]'), br = board ? board.getBoundingClientRect() : null, bs = board ? cs(board) : null;
+    return 'Page ' + (document.visibilityState || '?') + ' · frames ' + rafN + ' · board ' + (br ? Math.round(br.left) + ',' + Math.round(br.top) + ' ' + Math.round(br.width) + '×' + Math.round(br.height) + ' op ' + bs.opacity + ' vis ' + bs.visibility + ' disp ' + bs.display : 'none') + '\n' +
+      'Scoreboard HTML ' + (sb ? sb.innerHTML.length : 'missing') + ' chars · stage ' + (stg ? stg.offsetWidth + '×' + stg.offsetHeight + ' ' + t : 'missing') + ' · page opacity ' + (document.documentElement.style.opacity || '1') + ' · window ' + innerWidth + '×' + innerHeight; }
   window.addEventListener('unhandledrejection', function(e){ add('promise: ' + (e.reason && (e.reason.message || e.reason))); });
   if (DEBUG && GAME) fetch(PREFIX + '/api/games/' + GAME + '/json?view=graphics', { cache: 'no-store' })
     .then(function(r){ return r.json().then(function(d){ st.json = 'HTTP ' + r.status + (d && d.homeTeam ? ' · ' + d.homeTeam.name + ' ' + d.homeTeam.score + '–' + d.awayTeam.score + ' ' + d.awayTeam.name : ''); draw(); }); })
