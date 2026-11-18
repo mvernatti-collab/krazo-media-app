@@ -19,6 +19,41 @@ const SHIM = (debug, gameId, prefix) => String.raw`<script>
   var DEBUG = ${debug ? "true" : "false"}, GAME = ${JSON.stringify(gameId || "")}, PREFIX = ${JSON.stringify(prefix)};
   var st = { mode: 'starting', opened: 0, events: 0, bytes: 0, errors: 0, polls: 0, json: 'testing…', ctype: '', sample: '', empty: 0 }, log = [], box;
 
+  // --- PT's overlay output is a hidden page: no animation frames, no resize
+  // callbacks, visibilityState 'hidden'. Back them with timers. ---
+  try {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: function(){ return false; } });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: function(){ return 'visible'; } });
+  } catch (e) {}
+  (function(){
+    var nRAF = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : null;
+    var nCAF = window.cancelAnimationFrame ? window.cancelAnimationFrame.bind(window) : null;
+    var seq = 0, live = {};
+    window.requestAnimationFrame = function(cb){
+      var id = ++seq, rec = { done: false };
+      live[id] = rec;
+      var run = function(t){ if (rec.done) return; rec.done = true; delete live[id]; cb(t); };
+      if (nRAF) rec.n = nRAF(function(t){ run(t); });
+      rec.t = setTimeout(function(){ run(performance.now()); }, 34);
+      return id;
+    };
+    window.cancelAnimationFrame = function(id){ var r = live[id]; if (!r) return; r.done = true; clearTimeout(r.t); if (nCAF && r.n) nCAF(r.n); delete live[id]; };
+  })();
+  (function(){
+    // Polling ResizeObserver: checks observed elements every 200 ms.
+    function PRO(cb){ this.cb = cb; this.els = []; var self = this; this.iv = setInterval(function(){ self._check(false); }, 200); }
+    PRO.prototype.observe = function(el){ if (this.els.some(function(x){ return x.el === el; })) return; this.els.push({ el: el, w: -1, h: -1 }); var self = this; setTimeout(function(){ self._check(true); }, 0); };
+    PRO.prototype.unobserve = function(el){ this.els = this.els.filter(function(x){ return x.el !== el; }); };
+    PRO.prototype.disconnect = function(){ this.els = []; clearInterval(this.iv); };
+    PRO.prototype._check = function(){
+      var out = [];
+      this.els.forEach(function(x){ var r = x.el.getBoundingClientRect(), w = x.el.offsetWidth, h = x.el.offsetHeight;
+        if (w !== x.w || h !== x.h) { x.w = w; x.h = h; out.push({ target: x.el, contentRect: { x: 0, y: 0, width: w, height: h, top: 0, left: 0, right: w, bottom: h }, borderBoxSize: [{ inlineSize: w, blockSize: h }], contentBoxSize: [{ inlineSize: w, blockSize: h }] }); } });
+      if (out.length) try { this.cb(out, this); } catch (e) { if (window.console) console.error(e); }
+    };
+    window.ResizeObserver = PRO;
+  })();
+
   // --- BroadcastChannel stand-in (same-page only) ---
   if (typeof window.BroadcastChannel === 'undefined') {
     var reg = {};
