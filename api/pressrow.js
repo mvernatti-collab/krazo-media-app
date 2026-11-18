@@ -14,59 +14,86 @@ const HOSTS = {
   "gridiron.pressrowapps.com": "gridiron",
 };
 
-const SHIM = (debug) => `<script>
+const SHIM = (debug, gameId, prefix) => String.raw`<script>
 (function(){
+  var DEBUG = ${debug ? "true" : "false"}, GAME = ${JSON.stringify(gameId || "")}, PREFIX = ${JSON.stringify(prefix)};
+  var st = { mode: 'starting', opened: 0, events: 0, bytes: 0, errors: 0, polls: 0, json: 'testing…' }, log = [], box;
+
   // --- BroadcastChannel stand-in (same-page only) ---
   if (typeof window.BroadcastChannel === 'undefined') {
     var reg = {};
-    window.BroadcastChannel = function(name){
-      this.name = String(name); this.onmessage = null; this._l = [];
-      (reg[this.name] = reg[this.name] || []).push(this);
-    };
-    window.BroadcastChannel.prototype.postMessage = function(data){
-      var self = this, peers = (reg[this.name] || []).slice();
-      setTimeout(function(){ peers.forEach(function(p){
-        if (p === self || p._closed) return;
-        var ev = { data: data, type: 'message', target: p };
-        if (typeof p.onmessage === 'function') p.onmessage(ev);
-        p._l.forEach(function(f){ f(ev); });
-      }); }, 0);
-    };
+    window.BroadcastChannel = function(name){ this.name = String(name); this.onmessage = null; this._l = []; (reg[this.name] = reg[this.name] || []).push(this); };
+    window.BroadcastChannel.prototype.postMessage = function(data){ var self = this, peers = (reg[this.name] || []).slice();
+      setTimeout(function(){ peers.forEach(function(p){ if (p === self || p._closed) return; var ev = { data: data, type: 'message', target: p };
+        if (typeof p.onmessage === 'function') p.onmessage(ev); p._l.forEach(function(f){ f(ev); }); }); }, 0); };
     window.BroadcastChannel.prototype.addEventListener = function(t, f){ if (t === 'message') this._l.push(f); };
     window.BroadcastChannel.prototype.removeEventListener = function(t, f){ this._l = this._l.filter(function(x){ return x !== f; }); };
     window.BroadcastChannel.prototype.close = function(){ this._closed = true; };
   }
-  ${debug ? `
-  // --- on-screen debug box ---
-  var log = [], es = { opened: 0, msgs: 0, errors: 0, named: 0 }, box;
-  function draw(){
-    if (!box) { box = document.createElement('div'); box.id = 'krazo-relay-debug';
-      box.style.cssText = 'position:fixed;left:8px;top:8px;z-index:2147483647;background:rgba(0,0,0,.85);color:#7CFC9A;font:14px/1.35 Menlo,monospace;padding:8px 10px;border-radius:6px;max-width:70%;white-space:pre-wrap;pointer-events:none';
-      (document.body || document.documentElement).appendChild(box); }
-    box.textContent = 'Krazo relay · ' + navigator.userAgent.replace(/.*AppleWebKit\\//,'WebKit ') +
-      '\\nStream: opened ' + es.opened + ' · messages ' + es.msgs + ' · named events ' + es.named + ' · errors ' + es.errors +
-      (log.length ? '\\nErrors:\\n' + log.slice(-8).join('\\n') : '\\nNo script errors');
+
+  // --- EventSource replacement built on fetch, so it doesn't depend on PT's own ---
+  // Falls back to polling the game JSON (scoreboard only) if no stream data arrives.
+  function KES(url){
+    this.url = url; this.readyState = 0; this.withCredentials = false; this._l = {};
+    this.onopen = null; this.onmessage = null; this.onerror = null;
+    var self = this; setTimeout(function(){ self._go(); }, 0);
   }
-  function add(s){ log.push(String(s).slice(0, 300)); draw(); }
-  window.addEventListener('error', function(e){ var t = e.target; if (t && t !== window && t.tagName) { add('could not load ' + t.tagName.toLowerCase() + ': ' + (t.src || t.href || '')); return; } add((e.message || 'error') + ' @line ' + (e.lineno || '?') + ':' + (e.colno || '?')); }, true);
+  KES.CONNECTING = 0; KES.OPEN = 1; KES.CLOSED = 2;
+  KES.prototype.addEventListener = function(t, f){ (this._l[t] = this._l[t] || []).push(f); };
+  KES.prototype.removeEventListener = function(t, f){ this._l[t] = (this._l[t] || []).filter(function(x){ return x !== f; }); };
+  KES.prototype._emit = function(t, ev){ ev = ev || {}; ev.type = t; ev.target = this;
+    var h = this['on' + t]; if ((t === 'open' || t === 'message' || t === 'error') && typeof h === 'function') { try { h.call(this, ev); } catch (e) { add(e); } }
+    (this._l[t] || []).slice().forEach(function(f){ try { f(ev); } catch (e) { add(e); } }); };
+  KES.prototype.close = function(){ this.readyState = 2; this._closed = true; if (this._ac) try { this._ac.abort(); } catch (e) {} if (this._pt) clearInterval(this._pt); };
+  KES.prototype._go = function(){
+    var self = this, got = false;
+    self._ac = typeof AbortController === 'function' ? new AbortController() : null;
+    var watchdog = setTimeout(function(){ if (!got && !self._closed) { if (self._ac) try { self._ac.abort(); } catch (e) {} self._poll(); } }, 8000);
+    fetch(self.url, { headers: { Accept: 'text/event-stream' }, cache: 'no-store', signal: self._ac ? self._ac.signal : undefined })
+      .then(function(r){
+        if (!r.ok || !r.body || !r.body.getReader) throw new Error('stream HTTP ' + r.status);
+        self.readyState = 1; st.opened++; st.mode = 'stream'; self._emit('open'); draw();
+        var rd = r.body.getReader(), dec = new TextDecoder(), buf = '', data = [], name = '', id = '';
+        function flush(){ if (data.length) { st.events++; self._emit(name || 'message', { data: data.join('\n'), lastEventId: id }); } data = []; name = ''; }
+        function pump(){ return rd.read().then(function(x){
+          if (x.done) throw new Error('stream ended');
+          got = true; st.bytes += x.value.length; buf += dec.decode(x.value, { stream: true });
+          var lines = buf.split(/\r\n|\r|\n/); buf = lines.pop();
+          for (var i = 0; i < lines.length; i++) { var ln = lines[i];
+            if (ln === '') { flush(); continue; } if (ln.charAt(0) === ':') continue;
+            var c = ln.indexOf(':'), f = c < 0 ? ln : ln.slice(0, c), v = c < 0 ? '' : ln.slice(c + 1); if (v.charAt(0) === ' ') v = v.slice(1);
+            if (f === 'data') data.push(v); else if (f === 'event') name = v; else if (f === 'id') id = v; }
+          draw(); return pump(); }); }
+        return pump();
+      })
+      .catch(function(e){ clearTimeout(watchdog); if (self._closed || self._polling) return; st.errors++; add('stream: ' + (e && e.message || e)); self.readyState = 2; self._emit('error'); draw(); });
+  };
+  KES.prototype._poll = function(){
+    var self = this; if (self._polling || !GAME) return; self._polling = true; st.mode = 'polling (scoreboard only)';
+    self.readyState = 1; self._emit('open'); self._emit('air', { data: '{"onAir":true}' });
+    function tick(){ fetch(PREFIX + '/api/games/' + GAME + '/json?view=graphics', { cache: 'no-store' })
+      .then(function(r){ return r.text(); }).then(function(t){ st.polls++; if (!self._closed) self._emit('message', { data: t }); draw(); })
+      .catch(function(e){ st.errors++; add('poll: ' + (e && e.message || e)); }); }
+    tick(); self._pt = setInterval(tick, 1000);
+  };
+  window.EventSource = KES;
+
+  function draw(){
+    if (!DEBUG) return;
+    if (!box) { if (!document.body) return; box = document.createElement('div');
+      box.style.cssText = 'position:fixed;left:8px;top:8px;z-index:2147483647;background:rgba(0,0,0,.85);color:#7CFC9A;font:14px/1.35 Menlo,monospace;padding:8px 10px;border-radius:6px;max-width:70%;white-space:pre-wrap;pointer-events:none';
+      document.body.appendChild(box); }
+    box.textContent = 'Krazo relay v2 · ' + navigator.userAgent.replace(/.*AppleWebKit\//, 'WebKit ') +
+      '\nMode: ' + st.mode + ' · opened ' + st.opened + ' · bytes ' + st.bytes + ' · events ' + st.events + ' · polls ' + st.polls + ' · errors ' + st.errors +
+      '\nRelay JSON test: ' + st.json + (log.length ? '\nErrors:\n' + log.slice(-6).join('\n') : '\nNo script errors');
+  }
+  function add(s){ log.push(String(s && s.message ? s.message : s).slice(0, 240)); draw(); }
+  window.addEventListener('error', function(e){ var t = e.target; if (t && t !== window && t.tagName) { if (t.tagName !== 'IMG') add('could not load ' + t.tagName.toLowerCase()); return; } add((e.message || 'error') + ' @line ' + (e.lineno || '?')); }, true);
   window.addEventListener('unhandledrejection', function(e){ add('promise: ' + (e.reason && (e.reason.message || e.reason))); });
-  var oe = console.error; console.error = function(){ try { add('console: ' + [].slice.call(arguments).join(' ')); } catch(x){} return oe.apply(console, arguments); };
-  if (window.EventSource) {
-    var ES = window.EventSource;
-    window.EventSource = function(url, opts){
-      var s = new ES(url, opts);
-      s.addEventListener('open', function(){ es.opened++; draw(); });
-      s.addEventListener('message', function(){ es.msgs++; draw(); });
-      s.addEventListener('error', function(){ es.errors++; draw(); });
-      var ael = s.addEventListener.bind(s);
-      s.addEventListener = function(t, f, o){ if (t !== 'open' && t !== 'message' && t !== 'error') { ael(t, function(ev){ es.named++; draw(); }); } return ael(t, f, o); };
-      return s;
-    };
-    window.EventSource.prototype = ES.prototype;
-    window.EventSource.CONNECTING = 0; window.EventSource.OPEN = 1; window.EventSource.CLOSED = 2;
-  } else { add('EventSource is missing'); }
-  document.addEventListener('DOMContentLoaded', draw);
-  setInterval(draw, 1000);` : ""}
+  if (DEBUG && GAME) fetch(PREFIX + '/api/games/' + GAME + '/json?view=graphics', { cache: 'no-store' })
+    .then(function(r){ return r.json().then(function(d){ st.json = 'HTTP ' + r.status + (d && d.homeTeam ? ' · ' + d.homeTeam.name + ' ' + d.homeTeam.score + '–' + d.awayTeam.score + ' ' + d.awayTeam.name : ''); draw(); }); })
+    .catch(function(e){ st.json = 'FAILED ' + (e && e.message || e); draw(); });
+  document.addEventListener('DOMContentLoaded', draw); setInterval(draw, 1000);
 })();
 </script>`;
 
@@ -78,7 +105,8 @@ export function transform(html, host, debug) {
   out = out.replace(/(['"])\/api\//g, `$1${prefix}/api/`);
   // Drop any CSP meta that would block the injected shim.
   out = out.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
-  const shim = SHIM(debug);
+  const gm = html.match(/const gameId = "([^"]+)"/);
+  const shim = SHIM(debug, gm ? gm[1] : "", prefix);
   if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, (m) => m + shim);
   else out = shim + out;
   return out;
