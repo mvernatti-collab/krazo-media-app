@@ -17,7 +17,7 @@ const HOSTS = {
 const SHIM = (debug, gameId, prefix) => String.raw`<script>
 (function(){
   var DEBUG = ${debug ? "true" : "false"}, GAME = ${JSON.stringify(gameId || "")}, PREFIX = ${JSON.stringify(prefix)};
-  var st = { mode: 'starting', opened: 0, events: 0, bytes: 0, errors: 0, polls: 0, json: 'testing…' }, log = [], box;
+  var st = { mode: 'starting', opened: 0, events: 0, bytes: 0, errors: 0, polls: 0, json: 'testing…', ctype: '', sample: '', empty: 0 }, log = [], box;
 
   // --- BroadcastChannel stand-in (same-page only) ---
   if (typeof window.BroadcastChannel === 'undefined') {
@@ -52,24 +52,29 @@ const SHIM = (debug, gameId, prefix) => String.raw`<script>
     fetch(self.url, { headers: { Accept: 'text/event-stream' }, cache: 'no-store', signal: self._ac ? self._ac.signal : undefined })
       .then(function(r){
         if (!r.ok || !r.body || !r.body.getReader) throw new Error('stream HTTP ' + r.status);
+        st.ctype = (r.headers.get('content-type') || '?') + ' · enc ' + (r.headers.get('content-encoding') || 'none') + ' · HTTP ' + r.status;
+        var evBefore = st.events;
         self.readyState = 1; st.opened++; st.mode = 'stream'; self._emit('open'); draw();
         var rd = r.body.getReader(), dec = new TextDecoder(), buf = '', data = [], name = '', id = '';
         function flush(){ if (data.length) { st.events++; self._emit(name || 'message', { data: data.join('\n'), lastEventId: id }); } data = []; name = ''; }
+        function handle(ln){
+          if (ln === '') { flush(); return; } if (ln.charAt(0) === ':') return;
+          var c = ln.indexOf(':'), f = c < 0 ? ln : ln.slice(0, c), v = c < 0 ? '' : ln.slice(c + 1); if (v.charAt(0) === ' ') v = v.slice(1);
+          if (f === 'data') data.push(v); else if (f === 'event') name = v; else if (f === 'id') id = v; }
         function pump(){ return rd.read().then(function(x){
-          if (x.done) throw new Error('stream ended');
-          got = true; st.bytes += x.value.length; buf += dec.decode(x.value, { stream: true });
+          if (x.done) { buf += dec.decode(); if (buf) { var tail = buf.split(/\r\n|\r|\n/); buf = ''; for (var j = 0; j < tail.length; j++) handle(tail[j]); } flush();
+            if (st.events === evBefore) { st.empty++; if (st.empty >= 2) { self._poll(); return; } }
+            throw new Error('stream ended'); }
+          got = true; st.bytes += x.value.length; var chunk = dec.decode(x.value, { stream: true }); if (st.sample.length < 160) st.sample += chunk.slice(0, 160 - st.sample.length); buf += chunk;
           var lines = buf.split(/\r\n|\r|\n/); buf = lines.pop();
-          for (var i = 0; i < lines.length; i++) { var ln = lines[i];
-            if (ln === '') { flush(); continue; } if (ln.charAt(0) === ':') continue;
-            var c = ln.indexOf(':'), f = c < 0 ? ln : ln.slice(0, c), v = c < 0 ? '' : ln.slice(c + 1); if (v.charAt(0) === ' ') v = v.slice(1);
-            if (f === 'data') data.push(v); else if (f === 'event') name = v; else if (f === 'id') id = v; }
+          for (var i = 0; i < lines.length; i++) handle(lines[i]);
           draw(); return pump(); }); }
         return pump();
       })
       .catch(function(e){ clearTimeout(watchdog); if (self._closed || self._polling) return; st.errors++; add('stream: ' + (e && e.message || e)); self.readyState = 2; self._emit('error'); draw(); });
   };
   KES.prototype._poll = function(){
-    var self = this; if (self._polling || !GAME) return; self._polling = true; st.mode = 'polling (scoreboard only)';
+    var self = this; if (self._polling || !GAME) return; self._polling = true; st.mode = 'polling (scoreboard only)'; if (self._ac) try { self._ac.abort(); } catch (e) {}
     self.readyState = 1; self._emit('open'); self._emit('air', { data: '{"onAir":true}' });
     function tick(){ fetch(PREFIX + '/api/games/' + GAME + '/json?view=graphics', { cache: 'no-store' })
       .then(function(r){ return r.text(); }).then(function(t){ st.polls++; if (!self._closed) self._emit('message', { data: t }); draw(); })
@@ -85,7 +90,7 @@ const SHIM = (debug, gameId, prefix) => String.raw`<script>
       document.body.appendChild(box); }
     box.textContent = 'Krazo relay v2 · ' + navigator.userAgent.replace(/.*AppleWebKit\//, 'WebKit ') +
       '\nMode: ' + st.mode + ' · opened ' + st.opened + ' · bytes ' + st.bytes + ' · events ' + st.events + ' · polls ' + st.polls + ' · errors ' + st.errors +
-      '\nRelay JSON test: ' + st.json + (log.length ? '\nErrors:\n' + log.slice(-6).join('\n') : '\nNo script errors');
+      '\nRelay JSON test: ' + st.json + '\nStream reply: ' + (st.ctype || '—') + (st.sample ? '\nFirst bytes: ' + JSON.stringify(st.sample) : '') + (log.length ? '\nErrors:\n' + log.slice(-6).join('\n') : '\nNo script errors');
   }
   function add(s){ log.push(String(s && s.message ? s.message : s).slice(0, 240)); draw(); }
   window.addEventListener('error', function(e){ var t = e.target; if (t && t !== window && t.tagName) { if (t.tagName !== 'IMG') add('could not load ' + t.tagName.toLowerCase()); return; } add((e.message || 'error') + ' @line ' + (e.lineno || '?')); }, true);
