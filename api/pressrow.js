@@ -92,10 +92,14 @@ const SHIM = (debug, gameId, prefix) => String.raw`<script>
       document.body.appendChild(box); }
     box.textContent = 'Krazo relay v2 · ' + navigator.userAgent.replace(/.*AppleWebKit\//, 'WebKit ') +
       '\nMode: ' + st.mode + ' · opened ' + st.opened + ' · bytes ' + st.bytes + ' · events ' + st.events + ' · polls ' + st.polls + ' · errors ' + st.errors +
-      '\nRelay JSON test: ' + st.json + '\nStream reply: ' + (st.ctype || '—') + (st.sample ? '\nFirst bytes: ' + JSON.stringify(st.sample) : '') + (log.length ? '\nErrors:\n' + log.slice(-6).join('\n') : '\nNo script errors');
+      '\nRelay JSON test: ' + st.json + '\n' + dom() + '\nStream reply: ' + (st.ctype || '—') + (st.sample ? '\nFirst bytes: ' + JSON.stringify(st.sample) : '') + (log.length ? '\nErrors:\n' + log.slice(-6).join('\n') : '\nNo script errors');
   }
   function add(s){ log.push(String(s && s.message ? s.message : s).slice(0, 240)); draw(); }
   window.addEventListener('error', function(e){ var t = e.target; if (t && t !== window && t.tagName) { if (t.tagName !== 'IMG') add('could not load ' + t.tagName.toLowerCase()); return; } add((e.message || 'error') + ' @line ' + (e.lineno || '?')); }, true);
+  ['error','warn'].forEach(function(k){ var o = console[k]; console[k] = function(){ try { var a = [].slice.call(arguments).map(function(x){ return x && x.stack ? (x.message + ' | ' + String(x.stack).split('\n')[0]) : (x && x.message) || String(x); }); add('console.' + k + ': ' + a.join(' ')); } catch (e) {} return o && o.apply(console, arguments); }; });
+  function dom(){ var sb = document.getElementById('scoreboard-root'), stg = document.getElementById('gfx-stage'), cs = function(e){ try { return getComputedStyle(e); } catch (x) { return null; } };
+    var t = stg ? (cs(stg) || {}).transform : '—';
+    return 'Scoreboard HTML ' + (sb ? sb.innerHTML.length : 'missing') + ' chars · stage ' + (stg ? stg.offsetWidth + '×' + stg.offsetHeight + ' ' + t : 'missing') + ' · page opacity ' + (document.documentElement.style.opacity || '1') + ' · window ' + innerWidth + '×' + innerHeight; }
   window.addEventListener('unhandledrejection', function(e){ add('promise: ' + (e.reason && (e.reason.message || e.reason))); });
   if (DEBUG && GAME) fetch(PREFIX + '/api/games/' + GAME + '/json?view=graphics', { cache: 'no-store' })
     .then(function(r){ return r.json().then(function(d){ st.json = 'HTTP ' + r.status + (d && d.homeTeam ? ' · ' + d.homeTeam.name + ' ' + d.homeTeam.score + '–' + d.awayTeam.score + ' ' + d.awayTeam.name : ''); draw(); }); })
@@ -114,8 +118,14 @@ export function transform(html, host, debug) {
   out = out.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
   const gm = html.match(/const gameId = "([^"]+)"/);
   const shim = SHIM(debug, gm ? gm[1] : "", prefix);
+  // PT's embedded browser doesn't run CSS animations, and Press Row's graphics
+  // start invisible and fade in, so they stayed invisible. Turn animations and
+  // transitions off so everything shows in its final state immediately.
+  const noAnim = '<style id="krazo-no-anim">*,*::before,*::after{animation:none!important;transition:none!important}</style>';
   if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, (m) => m + shim);
   else out = shim + out;
+  if (/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, noAnim + '</head>');
+  else out = noAnim + out;
   return out;
 }
 
