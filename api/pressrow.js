@@ -34,6 +34,8 @@ const SHIM = (debug, gameId, prefix) => String.raw`<script>
   // --- EventSource replacement built on fetch, so it doesn't depend on PT's own ---
   // Falls back to polling the game JSON (scoreboard only) if no stream data arrives.
   function KES(url){
+    var sm = String(url).match(/(\/api\/games\/[^\/?#]+\/broadcast-stream)/);
+    if (sm) url = '/api/prstream?h=' + PREFIX.split('/').pop() + '&p=' + encodeURIComponent(sm[1]);
     this.url = url; this.readyState = 0; this.withCredentials = false; this._l = {};
     this.onopen = null; this.onmessage = null; this.onerror = null;
     var self = this; setTimeout(function(){ self._go(); }, 0);
@@ -63,7 +65,7 @@ const SHIM = (debug, gameId, prefix) => String.raw`<script>
           if (f === 'data') data.push(v); else if (f === 'event') name = v; else if (f === 'id') id = v; }
         function pump(){ return rd.read().then(function(x){
           if (x.done) { buf += dec.decode(); if (buf) { var tail = buf.split(/\r\n|\r|\n/); buf = ''; for (var j = 0; j < tail.length; j++) handle(tail[j]); } flush();
-            if (st.events === evBefore) { st.empty++; if (st.empty >= 2) { self._poll(); return; } }
+            if (st.events === evBefore) { st.empty++; if (st.empty >= 2 && !st.events) { self._poll(); return; } }
             throw new Error('stream ended'); }
           got = true; st.bytes += x.value.length; var chunk = dec.decode(x.value, { stream: true }); if (st.sample.length < 160) st.sample += chunk.slice(0, 160 - st.sample.length); buf += chunk;
           var lines = buf.split(/\r\n|\r|\n/); buf = lines.pop();
@@ -71,7 +73,7 @@ const SHIM = (debug, gameId, prefix) => String.raw`<script>
           draw(); return pump(); }); }
         return pump();
       })
-      .catch(function(e){ clearTimeout(watchdog); if (self._closed || self._polling) return; st.errors++; add('stream: ' + (e && e.message || e)); self.readyState = 2; self._emit('error'); draw(); });
+      .catch(function(e){ clearTimeout(watchdog); if (self._closed || self._polling) return; st.errors++; if (!st.events && st.errors >= 3) { self._poll(); return; } add('stream: ' + (e && e.message || e)); self.readyState = 2; self._emit('error'); draw(); });
   };
   KES.prototype._poll = function(){
     var self = this; if (self._polling || !GAME) return; self._polling = true; st.mode = 'polling (scoreboard only)'; if (self._ac) try { self._ac.abort(); } catch (e) {}
