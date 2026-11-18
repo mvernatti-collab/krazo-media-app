@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/prx/hoops/:path*", "destination": "https://hoops.pressrowapps.com/:path*" },
+    { "source": "/prx/gridiron/:path*", "destination": "https://gridiron.pressrowapps.com/:path*" }
+  ]
+}

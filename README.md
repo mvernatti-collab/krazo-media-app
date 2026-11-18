@@ -112,3 +112,13 @@ Clicking a button writes the `pt/live` doc in Firestore. The overlay listens to 
 - If Production Truck's built-in web renderer can't hold the Firebase live connection, the overlay falls back to polling Firestore once a second. That's up to about 3,600 reads an hour, well within the free tier for a normal event.
 - `overlay.html?test=ref-near-fall&bg=1` plays one clip locally for previewing. Add `&debug=1` to show the connection state.
 - Each graphic is defined in `overlay.html` (the `CL` object). Buttons are listed in `control.html` (`GROUPS`).
+
+## Press Row relay for Production Truck
+
+Production Truck's built-in browser is an older Safari engine (it has no BroadcastChannel, for one). `api/pressrow.js` loads a Press Row overlay page on the server, sends its data calls through krazomedia.com (the `/prx` rewrites in `vercel.json`), and adds compatibility fixes.
+
+In PT's HTML Embed, use:
+
+    https://krazomedia.com/api/pressrow?u=<your Press Row overlay URL>
+
+Add `&debug=1` to show a status box with stream activity and any errors the page throws.
