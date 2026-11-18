@@ -153,7 +153,10 @@ export function transform(html, host, debug, opts = {}) {
   // PT's embedded browser doesn't run CSS animations, and Press Row's graphics
   // start invisible and fade in, so they stayed invisible. Turn animations and
   // transitions off so everything shows in its final state immediately.
-  const noAnim = '<style id="krazo-no-anim">*,*::before,*::after{animation:none!important;transition:none!important}</style>';
+  // PT's program capture also drops GPU-composited layers: Press Row's scorebug
+  // has filter: drop-shadow on the whole board, so it showed in PT's preview but
+  // not on the overlay. Remove filters (shadows) so it's drawn normally.
+  const noAnim = '<style id="krazo-no-anim">*,*::before,*::after{animation:none!important;transition:none!important;filter:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}</style>';
   if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, (m) => m + shim);
   else out = shim + out;
   out = applyAnchor(out, opts.sb);
