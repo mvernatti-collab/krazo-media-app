@@ -214,7 +214,12 @@ addEventListener('resize',fit);fit();
 let playing=null,t0=0;
 function play(id){if(!CL[id])return false;load(id);playing=id;t0=performance.now();return true}
 function clearNow(){if(!playing)return;const t=(performance.now()-t0)/1000;const out=DUR-.75;if(t<out)t0=performance.now()-out*1000}
-(function frame(){if(playing){const t=(performance.now()-t0)/1000;if(t>=DUR){root.innerHTML='';REG=[];RENDER=null;playing=null;if(QS.get('loop')&&QS.get('test'))play(QS.get('test'))}else R(t)}requestAnimationFrame(frame)})();
+// Render step. Driven by requestAnimationFrame AND a backup timer, because some
+// embedded browsers (like Production Truck's) pause requestAnimationFrame.
+let frames=0;
+function step(){frames++;if(playing){const t=(performance.now()-t0)/1000;if(t>=DUR){root.innerHTML='';REG=[];RENDER=null;playing=null;if(QS.get('loop')&&QS.get('test'))play(QS.get('test'))}else R(t)}}
+(function raf(){step();requestAnimationFrame(raf)})();
+setInterval(step,33);
 if(QS.get('test'))play(QS.get('test'));
 if(!QS.has('nosync')){
  import('/pt/pt-sync.js').then(({listen,write})=>{
@@ -225,8 +230,10 @@ if(!QS.has('nosync')){
     if(base===undefined){base=d?d.nonce:0;beat();return}
     if(!d||d.nonce===base)return;base=d.nonce;lastNonce=d.nonce;lastClip=d.clip;
     if(d.clip==='__clear__')clearNow();else play(d.clip);
-    beat();
-  },st=>{link=st;if(dbg)dbg.textContent='PT overlay · '+st+(playing?' · '+playing:'')});
+    showDbg();beat();
+  },st=>{link=st;showDbg()});
+  function showDbg(){if(dbg)dbg.textContent=`PT overlay · ${link} · last: ${lastClip||'none'} · ${playing?'playing '+playing:'idle'} · frames ${frames}`}
+  if(dbg)setInterval(showDbg,500);
   setInterval(beat,5000);
  }).catch(e=>console.warn('[pt] sync failed',e));
 }
