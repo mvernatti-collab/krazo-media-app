@@ -122,3 +122,13 @@ In PT's HTML Embed, use:
     https://krazomedia.com/api/pressrow?u=<your Press Row overlay URL>
 
 Add `&debug=1` to show a status box with stream activity and any errors the page throws.
+
+Placement options (add to the address, measured in 1920×1080 pixels):
+
+| Option | What it does | Example |
+|---|---|---|
+| `sb` | Scoreboard corner: `top`, `top-left`, `top-right`, `bottom`, `bottom-left`, `bottom-right` | `&sb=bottom-left` |
+| `sbx`, `sby` | Nudge the scoreboard (+ is right/down) | `&sby=20` |
+| `sbscale` | Resize the scoreboard | `&sbscale=0.85` |
+| `cardx`, `cardy` | Nudge stat cards | `&cardy=200` |
+| `cardscale` | Resize stat cards | `&cardscale=0.8` |
