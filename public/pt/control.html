@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PT Graphics · Wrestling · Krazo Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Roboto:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<style>
+:root{--red:#E31B23;--red2:#ff3b42;--green:#17B26A;--bg:#0c0c0f;--card:#16161b;--line:#2a2a31;--mute:#9a9aa3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#fff;font-family:Roboto,system-ui,sans-serif;font-stretch:80%}
+header{position:sticky;top:0;z-index:5;background:#0c0c0fee;backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+header img{height:40px}
+h1{font:400 28px Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0}
+h1 span{color:var(--red2)}
+.pill{font:700 13px Roboto;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-radius:999px;background:#222229;color:#bbb;display:flex;align-items:center;gap:7px}
+.pill i{width:9px;height:9px;border-radius:50%;background:#666}
+.pill.ok i{background:var(--green);box-shadow:0 0 8px var(--green)} .pill.warn i{background:#ffb020} .pill.bad i{background:var(--red2)}
+.spacer{flex:1}
+#clear{background:var(--red);border:0;color:#fff;font:400 22px Anton,Impact,sans-serif;letter-spacing:.06em;padding:10px 22px;border-radius:10px;cursor:pointer}
+#clear:active{transform:scale(.97)}
+main{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:18px;padding:18px;max-width:1500px;margin:0 auto}
+@media (max-width:1000px){main{grid-template-columns:1fr}aside{order:-1}}
+section{margin-bottom:22px}
+section h2{font:700 13px Roboto;letter-spacing:.2em;text-transform:uppercase;color:var(--red2);margin:0 0 10px}
+section h2 small{color:var(--mute);letter-spacing:.04em;text-transform:none;font-weight:400;margin-left:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.btn{position:relative;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--red);border-radius:12px;color:#fff;text-align:left;padding:14px 14px 12px;cursor:pointer;min-height:84px;font-family:inherit}
+.btn:hover{border-color:#44444d;border-left-color:var(--red2)}
+.btn:active{transform:scale(.98)}
+.btn b{display:block;font:400 22px/1.05 Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.01em}
+.btn span{display:block;font-size:14px;color:var(--mute);margin-top:6px}
+.btn.on{background:#2a1214;border-color:var(--red2)}
+.btn .bar{position:absolute;left:0;bottom:0;height:4px;background:var(--red2);border-radius:0 0 0 8px;width:0}
+.btn.big{grid-column:span 2;border-left-color:#fff}
+.btn kbd{position:absolute;right:10px;top:10px;font:700 11px Roboto;color:#777;border:1px solid #333;border-radius:5px;padding:2px 5px}
+aside .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+aside h3{margin:0 0 10px;font:700 13px Roboto;letter-spacing:.2em;text-transform:uppercase;color:var(--mute)}
+#now{font:400 34px/1.05 Anton,Impact,sans-serif;text-transform:uppercase}
+#nowsub{color:var(--mute);font-size:15px;margin-top:6px;min-height:20px}
+#nowbar{height:6px;background:#26262d;border-radius:4px;margin-top:12px;overflow:hidden}#nowbar i{display:block;height:100%;width:0;background:var(--red2)}
+#ack{margin-top:10px;font-size:15px}
+.prev{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,#3a4458,#1a1f2a)}
+.prev iframe{position:absolute;left:0;top:0;width:1920px;height:1080px;border:0;transform-origin:0 0;pointer-events:none}
+.url{display:flex;gap:8px}.url input{flex:1;min-width:0;background:#0e0e12;border:1px solid var(--line);color:#ddd;border-radius:8px;padding:9px 10px;font:500 14px monospace}
+.url button{background:#24242b;border:1px solid var(--line);color:#fff;border-radius:8px;padding:0 14px;cursor:pointer;font-weight:700}
+.help{color:var(--mute);font-size:14px;line-height:1.45;margin:10px 0 0}
+.help b{color:#ddd}
+</style>
+</head>
+<body>
+<header>
+  <img src="/pt/krazo.png" alt="Krazo Media">
+  <h1>PT Graphics · <span>Wrestling</span></h1>
+  <div class="pill" id="pLink"><i></i><span>Connecting</span></div>
+  <div class="pill" id="pOver"><i></i><span>Overlay offline</span></div>
+  <div class="spacer"></div>
+  <button id="clear" title="Esc">Clear</button>
+</header>
+<main>
+  <div id="sections"></div>
+  <aside>
+    <div class="card">
+      <h3>On air</h3>
+      <div id="now">Nothing playing</div>
+      <div id="nowsub"></div>
+      <div id="nowbar"><i></i></div>
+      <div id="ack"></div>
+    </div>
+    <div class="card">
+      <h3>Preview</h3>
+      <div class="prev" id="prev"><iframe id="pv" title="Preview" src="about:blank"></iframe></div>
+      <p class="help">Local preview of the last graphic you sent. It plays here even if the overlay is offline.</p>
+    </div>
+    <div class="card">
+      <h3>Production Truck overlay URL</h3>
+      <div class="url"><input id="ourl" readonly><button id="copy">Copy</button></div>
+      <p class="help">In Production Truck, add this URL as an <b>HTML / web graphic</b> at <b>1920×1080</b> with a transparent background, and leave it on. When it's loaded, the <b>Overlay</b> light above turns green.</p>
+    </div>
+  </aside>
+</main>
+<script type="module">
+import { write, listen } from "/pt/pt-sync.js";
+
+const GROUPS = [
+  ["Open the night", "full screen", [["opener","Dual Meet 101","Full-screen opener",52,true]]],
+  ["Explain", "side panel · between matches", [
+    ["explain-team-points","Team points","6 / 5 / 4 / 3",14],
+    ["explain-match-points","Match points","TD · escape · reversal · NF",14],
+    ["explain-margins","Win margins","Dec · major · tech · fall",14],
+    ["explain-positions","Positions","Neutral · choice",15],
+    ["explain-overtime","Overtime","SV · TB · UTB",14],
+    ["explain-penalties","Penalty chart","All penalties",15]]],
+  ["Watch the ref", "after a call or on replay", [
+    ["ref-takedown","Takedown","+3 · 3 fingers",8],
+    ["ref-escape","Escape","+1 · 1 finger",8],
+    ["ref-reversal","Reversal","+2 · 2 fingers",8],
+    ["ref-near-fall","Near fall","Swipe count · 2–4",10.5],
+    ["ref-fall","Fall","Mat slap · +6",8],
+    ["ref-stalemate","Stalemate","No points · restart",8]]],
+  ["Match result", "lower third · when the hand is raised", [
+    ["result-decision","Decision","+3 team",7],
+    ["result-major-decision","Major decision","+4 team",7],
+    ["result-tech-fall","Tech fall","+5 team",7],
+    ["result-fall","Fall","+6 team",7],
+    ["result-forfeit","Forfeit","+6 team",7],
+    ["result-default","Default","+6 team",7],
+    ["result-disqualification","Disqualification","+6 team",7]]],
+  ["Penalty", "lower third · fire when it's called", [
+    ["penalty-stalling","Stalling","W · 1 · 1 · 2 · DQ",8],
+    ["penalty-illegal-hold","Illegal hold","1 · 1 · 2 · DQ",8],
+    ["penalty-technical-violation","Technical violation","1 · 1 · 2 · DQ",8],
+    ["penalty-unnecessary-roughness","Roughness","1 · 1 · 2 · DQ",8],
+    ["penalty-unsportsmanlike","Unsportsmanlike","1 · 1 · 2 · DQ",8],
+    ["penalty-caution","Caution","C · C · 1 · 1",8],
+    ["penalty-flagrant-misconduct","Flagrant misconduct","DQ",8],
+    ["info-potentially-dangerous","Potentially dangerous","Ref stop · 0",7]]],
+];
+const BY = {};
+const host = document.getElementById("sections");
+GROUPS.forEach(([name, sub, items]) => {
+  const s = document.createElement("section");
+  s.innerHTML = `<h2>${name}<small>${sub}</small></h2><div class="grid"></div>`;
+  const g = s.querySelector(".grid");
+  items.forEach(([id, label, desc, dur, big]) => {
+    const b = document.createElement("button");
+    b.className = "btn" + (big ? " big" : "");
+    b.innerHTML = `<b>${label}</b><span>${desc}</span><div class="bar"></div>`;
+    b.onclick = () => fire(id);
+    g.appendChild(b);
+    BY[id] = { label, desc, dur, el: b };
+  });
+  host.appendChild(s);
+});
+
+const ourl = location.origin + "/pt/overlay.html";
+document.getElementById("ourl").value = ourl;
+document.getElementById("copy").onclick = async () => { try { await navigator.clipboard.writeText(ourl); document.getElementById("copy").textContent = "Copied"; } catch { document.getElementById("ourl").select(); } };
+
+// preview iframe scaling
+const pv = document.getElementById("pv"), prev = document.getElementById("prev");
+const fitPrev = () => { pv.style.transform = `scale(${prev.clientWidth / 1920})`; };
+addEventListener("resize", fitPrev); fitPrev();
+
+let cur = null, sentNonce = 0;
+function setPill(id, cls, text) { const p = document.getElementById(id); p.className = "pill " + cls; p.querySelector("span").textContent = text; }
+
+async function fire(id) {
+  const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  sentNonce = nonce;
+  cur = { id, t0: performance.now(), dur: BY[id].dur };
+  Object.values(BY).forEach(x => x.el.classList.remove("on"));
+  BY[id].el.classList.add("on");
+  document.getElementById("now").textContent = BY[id].label;
+  document.getElementById("nowsub").textContent = BY[id].desc;
+  document.getElementById("ack").innerHTML = `<span style="color:#ffb020">Sent… waiting for the overlay</span>`;
+  pv.src = `/pt/overlay.html?test=${id}&bg=1&nosync=1`;
+  try { await write("live", { clip: id, nonce, at: Date.now() }); }
+  catch (e) { document.getElementById("ack").innerHTML = `<span style="color:var(--red2)">Couldn't send. Check the connection.</span>`; }
+}
+async function clearAll() {
+  const nonce = Date.now() * 1000 + 999;
+  sentNonce = nonce;
+  if (cur) cur.t0 = performance.now() - Math.max(0, cur.dur - 0.8) * 1000;
+  pv.src = "about:blank";
+  try { await write("live", { clip: "__clear__", nonce, at: Date.now() }); } catch {}
+}
+document.getElementById("clear").onclick = clearAll;
+addEventListener("keydown", e => { if (e.key === "Escape") clearAll(); });
+
+// progress bars
+(function tick() {
+  if (cur) {
+    const p = Math.min(1, (performance.now() - cur.t0) / 1000 / cur.dur);
+    document.querySelector("#nowbar i").style.width = (p * 100) + "%";
+    const bar = BY[cur.id].el.querySelector(".bar"); bar.style.width = (p * 100) + "%";
+    if (p >= 1) {
+      BY[cur.id].el.classList.remove("on"); bar.style.width = 0;
+      document.getElementById("now").textContent = "Nothing playing";
+      document.getElementById("nowsub").textContent = "";
+      document.querySelector("#nowbar i").style.width = 0;
+      cur = null;
+    }
+  }
+  requestAnimationFrame(tick);
+})();
+
+// connection + overlay status
+let lastBeat = 0, prevAlive;
+listen("status", d => {
+  if (!d) return;
+  if (prevAlive !== undefined && d.alive !== prevAlive) lastBeat = performance.now();
+  prevAlive = d.alive;
+  if (sentNonce && d.nonce === sentNonce) document.getElementById("ack").innerHTML = `<span style="color:var(--green)">✓ Overlay received it</span>`;
+}, st => setPill("pLink", st === "live" ? "ok" : st === "polling" ? "warn" : "bad", st === "live" ? "Live link" : st === "polling" ? "Backup link" : "No connection"), 2000);
+setInterval(() => {
+  const age = (performance.now() - lastBeat) / 1000;
+  if (lastBeat && age < 15) setPill("pOver", "ok", "Overlay online"); else setPill("pOver", "bad", "Overlay offline");
+}, 1000);
+</script>
+</body>
+</html>

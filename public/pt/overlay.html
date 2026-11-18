@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Krazo PT Overlay</title>
+<meta name="viewport" content="width=1920">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Anton&family=Roboto:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<style>
+:root{--red:#E31B23;--red2:#ff3b42;--green:#17B26A;--ink:#0b0b0d;--panel:rgba(12,12,15,.94);--line:#2b2b31;--mute:#a9a9b1}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:transparent}
+#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+#dbg{position:fixed;left:10px;top:10px;font:600 14px monospace;background:#000c;color:#0f0;padding:6px 10px;border-radius:6px;z-index:99}
+body{font-family:Roboto,sans-serif;font-stretch:75%;color:#fff}
+body.bg{background:#1d2430 linear-gradient(135deg,#30394a,#151a22)}
+.H{font-family:Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.01em;font-weight:400}
+#root{position:absolute;inset:0}
+.panel{position:absolute;background:var(--panel);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.panel .top{height:12px;background:var(--red)}
+.kick{display:flex;align-items:center;justify-content:space-between;padding:26px 44px 0;font:700 24px Roboto;font-stretch:75%;letter-spacing:.26em;text-transform:uppercase;color:var(--red2)}
+.kick img{height:58px}
+.ttl{font-size:104px;line-height:1;padding:10px 44px 0}
+.ttl small{display:block;font-size:46px;color:var(--mute);margin-top:6px}
+.body{padding:26px 44px 0}
+.rowp{display:flex;align-items:center;gap:26px;background:#18181d;border:1px solid var(--line);border-radius:14px;padding:16px 26px;margin-bottom:16px}
+.rowp .v{font-family:Anton;font-size:84px;line-height:1;color:var(--red2);min-width:130px;text-align:center}
+.rowp .k{font-family:Anton;font-size:44px;line-height:1.05;text-transform:uppercase}
+.rowp .k small{display:block;font:400 28px Roboto;font-stretch:75%;text-transform:none;color:#c9c9d0;margin-top:4px}
+.note{font:400 27px/1.3 Roboto;font-stretch:75%;color:#b9b9c0;padding:6px 44px 0}
+/* lower third */
+.l3{position:absolute;left:90px;top:770px;height:230px;display:flex;border-radius:16px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+.l3 .tag{width:210px;background:var(--red);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.l3 .tag span{font-family:Anton;font-size:40px;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.l3 .tag img{height:64px}
+.l3 .main{background:var(--panel);padding:26px 40px;display:flex;flex-direction:column;justify-content:center;min-width:600px;max-width:880px}
+.l3 .main .t{font-family:Anton;font-size:86px;line-height:1;text-transform:uppercase;white-space:nowrap}
+.l3 .main .d{font:400 30px/1.25 Roboto;font-stretch:75%;color:#d2d2d8;margin-top:10px}
+.l3 .chart{background:#141418;display:flex;align-items:center;gap:10px;padding:0 30px;border-left:1px solid var(--line)}
+.chip{width:96px;height:150px;border-radius:12px;background:#22222a;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #33333c}
+.chip i{font:700 18px Roboto;font-stretch:75%;letter-spacing:.18em;color:#9a9aa3;font-style:normal}
+.chip b{font-family:Anton;font-weight:400;font-size:62px;line-height:1.1}
+.chip b.w{font-size:30px;color:#ffcf3f;line-height:2.2}.chip b.dq{color:var(--red2)}
+.l3 .big{background:#141418;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 46px;border-left:1px solid var(--line)}
+.l3 .big b{font-family:Anton;font-weight:400;font-size:150px;line-height:1;color:var(--red2)}
+.l3 .big i{font:700 22px Roboto;font-stretch:75%;letter-spacing:.24em;font-style:normal;color:#c9c9d0}
+.l3 .sub{font:400 22px Roboto;font-stretch:75%;color:#8f8f98;margin-top:10px}
+/* react with ref */
+.refbox{position:absolute;right:0;top:0;bottom:0;width:700px;background:radial-gradient(420px 420px at 50% 55%,rgba(227,27,35,.22),transparent 70%)}
+.refbox svg{position:absolute;left:0;top:10px;width:700px;height:786px}
+.pts{position:absolute;font-family:Anton;color:var(--red2);text-shadow:0 10px 30px rgba(0,0,0,.6)}
+/* opener */
+.op{position:absolute;inset:0;background:radial-gradient(1200px 800px at 75% 40%,rgba(227,27,35,.22),transparent 60%),linear-gradient(160deg,#141418,#08080a)}
+.op .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:80px 80px}
+.slash{position:absolute;background:var(--red);transform:skewX(-16deg)}
+.sc{position:absolute;inset:0}
+.oh{position:absolute;left:140px;top:150px}
+.oh .k{font:700 30px Roboto;font-stretch:75%;letter-spacing:.3em;color:var(--red2);text-transform:uppercase}
+.oh .t{font-size:150px;line-height:1;margin-top:10px}
+.bug{position:absolute;right:60px;bottom:44px;height:84px}
+</style></head><body>
+<div id="stage"><div id="root"></div></div>
+<script>
+const KRAZO="/pt/krazo.png",OLOGO="/pt/ozark-o.png";
+const NS='http://www.w3.org/2000/svg';
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const eo=x=>1-Math.pow(1-x,3), eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const prog=(t,a,d)=>clamp((t-a)/d,0,1);
+function S(tag,at,p){const e=document.createElementNS(NS,tag);for(const k in at)e.setAttribute(k,at[k]);if(p)p.appendChild(e);return e}
+function H(html){const d=document.createElement('div');d.innerHTML=html.trim();return d.firstElementChild}
+function lerp(a,b,u){if(typeof a==='number')return a+(b-a)*u;if(Array.isArray(a))return a.map((v,i)=>lerp(v,b[i],u));if(a&&typeof a==='object'){const o={};for(const k in a)o[k]=(b&&k in b)?lerp(a[k],b[k],u):a[k];return o}return u<.5?a:b}
+function kf(t,fr){if(t<=fr[0][0])return fr[0][1];for(let i=0;i<fr.length-1;i++){const[t0,v0]=fr[i],[t1,v1]=fr[i+1];if(t<t1)return lerp(v0,v1,eio((t-t0)/(t1-t0)))}return fr[fr.length-1][1]}
+
+/* animation registry: elements fade/slide in at start, out near end */
+let REG=[],DUR=10,TICKS=[];
+function reg(el,start,kind='x',outAt=null){REG.push({el,start,kind,outAt});return el}
+function applyReg(t){for(const r of REG){const pin=eo(prog(t,r.start,.55));const oa=r.outAt??(DUR-.7);const pout=eio(prog(t,oa,.45));const p=pin*(1-pout);const e=r.el;e.style.opacity=p;
+  if(r.kind==='x')e.style.transform=`translateX(${(1-pin)*-60+pout*-30}px)`;else if(r.kind==='y')e.style.transform=`translateY(${(1-pin)*40}px)`;else if(r.kind==='s')e.style.transform=`scale(${.6+.4*pin+(pin<1?Math.sin(pin*Math.PI)*.12:0)})`;else if(r.kind==='wipe'){e.style.opacity=pout>0?1-pout:1;e.style.clipPath=`inset(0 ${(1-pin)*100}% 0 0 round 18px)`}}}
+
+/* ---------------- referee (upper body, front view) ---------------- */
+const SH={L:[232,330],R:[468,330]},LU=168,LF=150;
+function ik(S0,T,a,b,side){let dx=T[0]-S0[0],dy=T[1]-S0[1];const d=Math.hypot(dx,dy)||1;const dd=clamp(d,1,a+b-.5);const ux=dx/d,uy=dy/d;const W=[S0[0]+ux*dd,S0[1]+uy*dd];const base=Math.atan2(uy,ux),A=Math.acos(clamp((a*a+dd*dd-b*b)/(2*a*dd),-1,1));
+  const c1=[S0[0]+a*Math.cos(base+A),S0[1]+a*Math.sin(base+A)],c2=[S0[0]+a*Math.cos(base-A),S0[1]+a*Math.sin(base-A)];return{E:(side*c1[0]+c1[1]*.25)>(side*c2[0]+c2[1]*.25)?c1:c2,W}}
+const SKIN='#d2a07c',SKIN_D='#a8795a';
+class Ref{
+ constructor(host,vb='-20 -230 980 1100'){const svg=S('svg',{viewBox:vb,overflow:'visible'},host);this.svg=svg;
+  const defs=S('defs',{},svg);const id='p'+Math.random().toString(36).slice(2,7);this.id=id;const pt=S('pattern',{id,width:44,height:44,patternUnits:'userSpaceOnUse'},defs);S('rect',{width:44,height:44,fill:'#f5f5f5'},pt);S('rect',{width:22,height:44,fill:'#121214'},pt);
+  this.g=S('g',{},svg);const g=this.g;
+  // torso
+  S('path',{d:'M222 318 Q350 290 478 318 L500 800 L200 800 Z',fill:`url(#${id})`,stroke:'#0b0b0d','stroke-width':8,'stroke-linejoin':'round'},g);
+  S('path',{d:'M300 300 L350 372 L400 300 Z',fill:'#0b0b0d'},g);
+  S('path',{d:'M296 300 L350 360 L404 300',fill:'none',stroke:'#0b0b0d','stroke-width':12},g);
+  // neck + head
+  S('rect',{x:322,y:240,width:56,height:70,rx:18,fill:SKIN_D},g);
+  S('ellipse',{cx:350,cy:186,rx:66,ry:76,fill:SKIN,stroke:'#0b0b0d','stroke-width':7},g);
+  S('path',{d:'M284 176 Q286 104 350 102 Q416 104 416 176 Q404 136 350 134 Q296 136 284 176Z',fill:'#2b2119'},g);
+  // whistle on lanyard
+  S('path',{d:'M318 300 Q350 420 382 300',fill:'none',stroke:'#0b0b0d','stroke-width':4},g);this.whistle=S('rect',{x:338,y:404,width:30,height:18,rx:6,fill:'#cfcfcf',stroke:'#0b0b0d','stroke-width':4},g);
+  this.arms={};for(const s of['L','R']){const a=S('g',{},g);
+   const mk=(w,c)=>S('path',{fill:'none',stroke:c,'stroke-width':w,'stroke-linecap':'round','stroke-linejoin':'round'},a);
+   this.arms[s]={g:a,uo:mk(62,'#0b0b0d'),u:mk(50,`url(#${id})`),fo:mk(52,'#0b0b0d'),f:mk(40,SKIN),hand:S('g',{},a)}}
+  this.fx=S('g',{},svg);
+ }
+ drawHand(gp,mode,n){gp.innerHTML='';const st={fill:SKIN,stroke:'#0b0b0d','stroke-width':6,'stroke-linejoin':'round'};
+  // local coords: wrist at 0,0, fingers toward -y
+  if(mode==='flat'){S('rect',{x:-30,y:-70,width:60,height:76,rx:18,...st},gp);for(let i=0;i<4;i++)S('rect',{x:-29+i*15,y:-128,width:14,height:70,rx:7,...st},gp);S('rect',{x:24,y:-64,width:14,height:44,rx:7,...st,transform:'rotate(18 30 -40)'},gp);return}
+  S('rect',{x:-32,y:-74,width:64,height:80,rx:20,...st},gp);
+  const xs=[-28,-13,2,17];for(let i=0;i<4;i++){if(i<n)S('rect',{x:xs[i],y:-140,width:14,height:80,rx:7,...st},gp);else S('rect',{x:xs[i],y:-88,width:14,height:24,rx:7,...st},gp)}
+  if(mode==='thumb')S('rect',{x:-8,y:-128,width:18,height:66,rx:9,...st},gp);else S('rect',{x:-30,y:-52,width:44,height:16,rx:8,...st},gp);
+ }
+ set(p){for(const s of['L','R']){const a=this.arms[s],side=s==='R'?1:-1;const {E,W}=ik(SH[s],p[s],LU,LF,side);const u=`M${SH[s]} L${E}`,f=`M${E} L${W}`;a.uo.setAttribute('d',u);a.u.setAttribute('d',u);a.fo.setAttribute('d',f);a.f.setAttribute('d',f);
+   const m=(p[s+'m']||'fist'),n=p[s+'n']||0,key=m+n;if(a.key!==key){this.drawHand(a.hand,m,n);a.key=key}
+   let ang=Math.atan2(W[1]-E[1],W[0]-E[0])*180/Math.PI+90+(p[s+'r']||0);if(m==='thumb')ang=0;a.hand.setAttribute('transform',`translate(${W[0]} ${W[1]}) rotate(${ang}) scale(${side<0?-1.35:1.35} 1.35)`);this['W'+s]=W}}
+}
+const REST={L:[200,640],R:[500,640]};
+const UP=(n,w=0)=>({L:REST.L,R:[470+w,-20],Rm:'count',Rn:n});
+
+/* ---------------- builders ---------------- */
+function panel(x,y,w,h,kicker,title,sub){const p=H(`<div class="panel" style="left:${x}px;top:${y}px;width:${w}px;${h==='auto'?'padding-bottom:34px':`height:${h}px`}"><div class="top"></div><div class="kick"><span>${kicker}</span><img src="${KRAZO}"></div><div class="ttl H">${title}${sub?`<small>${sub}</small>`:''}</div></div>`);root.appendChild(p);reg(p,0,'wipe');reg(p.querySelector('.ttl'),.25);return p}
+function rows(p,items,t0=.5,st=.22){const b=H('<div class="body"></div>');p.appendChild(b);items.forEach((it,i)=>{const r=H(`<div class="rowp"><div class="v">${it[0]}</div><div class="k">${it[1]}${it[2]?`<small>${it[2]}</small>`:''}</div></div>`);b.appendChild(r);reg(r,t0+i*st)});return b}
+function note(p,txt,t0){const n=H(`<div class="note">${txt}</div>`);p.appendChild(n);reg(n,t0,'y');return n}
+function l3(tag,title,desc,right){const el=H(`<div class="l3"><div class="tag"><span>${tag}</span><img src="${KRAZO}"></div><div class="main"><div class="t">${title}</div><div class="d">${desc}</div></div>${right}</div>`);root.appendChild(el);reg(el,0,'wipe');reg(el.querySelector('.t'),.2);reg(el.querySelector('.d'),.35);return el}
+function chart(cells){return `<div class="chart">${cells.map((c,i)=>`<div class="chip"><i>${['1ST','2ND','3RD','4TH','5TH'][i]}</i>${c==='W'?'<b class="w">WARN</b>':c==='C'?'<b class="w">CAUTION</b>':c==='DQ'?'<b class="dq">DQ</b>':`<b>${c}</b>`}</div>`).join('')}</div>`}
+function bigPts(v,lab,sub){return `<div class="big"><b>${v}</b><i>${lab}</i>${sub?`<div class="sub">${sub}</div>`:''}</div>`}
+
+/* react panel with referee */
+function refPanel(title,sub,lines){const p=panel(90,150,1260,800,'Watch the ref',title,sub);p.querySelector('.ttl').style.width='580px';
+ const b=H('<div class="body" style="width:580px"></div>');p.appendChild(b);lines.forEach((l,i)=>{const d=H(`<div style="font:400 34px/1.3 Roboto;font-stretch:75%;color:#e6e6ea;margin-bottom:22px;padding-left:26px;border-left:6px solid var(--red)">${l}</div>`);b.appendChild(d);reg(d,.6+i*.25)});
+ const box=H('<div class="refbox"></div>');p.appendChild(box);const rf=new Ref(box);reg(box,.3,'f');return{p,rf,box}}
+
+/* ---------------- clip definitions ---------------- */
+const CL={};
+// ---- opener (full frame) ----
+CL.opener={dur:52,bg:1,still:null,build(){
+ const op=H('<div class="op"><div class="grid"></div></div>');root.appendChild(op);
+ const s1=H('<div class="slash" style="left:-200px;bottom:-60px;width:1100px;height:90px"></div>'),s2=H('<div class="slash" style="left:-300px;bottom:50px;width:900px;height:16px;opacity:.5"></div>');op.appendChild(s1);op.appendChild(s2);
+ const bug=H(`<img class="bug" src="${KRAZO}">`);op.appendChild(bug);
+ const scenes=[];const sc=(a,b,html)=>{const e=H(`<div class="sc">${html}</div>`);op.appendChild(e);scenes.push({a,b,e,items:[...e.querySelectorAll('[data-d]')]})};
+ sc(0,5.2,`<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+  <img data-d="0" data-k="s" src="${OLOGO}" style="height:200px;margin-bottom:30px"><div data-d=".3" style="font:700 34px Roboto;font-stretch:75%;letter-spacing:.34em;color:var(--red2)">OZARK TIGERS WRESTLING</div>
+  <div data-d=".5" class="H" style="font-size:250px;line-height:.95">Dual Meet <span style="color:var(--red)">101</span></div><div data-d=".9" style="font:400 44px Roboto;font-stretch:75%;color:#cfcfd6;margin-top:16px">A quick guide before tonight's matches</div></div>`);
+ sc(5.2,13.4,`<div class="oh"><div class="k" data-d="0">How a dual works</div><div class="t H" data-d=".1">Team vs. team</div></div>
+  <div style="position:absolute;left:140px;top:420px;width:1000px">${['One match at every weight class.','Every win puts team points on the board.','Most team points after the last match wins the dual.'].map((x,i)=>`<div data-d="${.5+i*.35}" style="display:flex;gap:30px;align-items:center;margin-bottom:34px"><div class="H" style="font-size:90px;color:var(--red);width:80px">${i+1}</div><div style="font:500 50px/1.2 Roboto;font-stretch:75%">${x}</div></div>`).join('')}</div>
+  <div style="position:absolute;right:160px;top:420px;display:flex;flex-direction:column;gap:30px">
+   <div data-d="1.8" style="width:520px;background:rgba(23,178,106,.14);border:3px solid var(--green);border-radius:18px;padding:26px 34px"><div class="H" style="font-size:76px;color:var(--green)">Home · Green</div><div style="font:400 32px Roboto;font-stretch:75%;color:#cfd">Usually wears the green ankle band</div></div>
+   <div data-d="2.1" style="width:520px;background:rgba(227,27,35,.14);border:3px solid var(--red);border-radius:18px;padding:26px 34px"><div class="H" style="font-size:76px;color:var(--red2)">Away · Red</div><div style="font:400 32px Roboto;font-stretch:75%;color:#fcc">Usually wears the red ankle band</div></div></div>`);
+ const tp=[['6','Fall · forfeit · default · DQ'],['5','Technical fall','Win by 15 or more'],['4','Major decision','Win by 8 to 14'],['3','Decision','Win by 1 to 7']];
+ sc(13.4,21.8,`<div class="oh"><div class="k" data-d="0">Team points</div><div class="t H" data-d=".1">How you win matters</div></div>
+  <div style="position:absolute;left:140px;right:140px;top:430px;display:grid;grid-template-columns:repeat(4,1fr);gap:28px">${tp.map((x,i)=>`<div data-d="${.5+i*.3}" style="background:rgba(16,16,20,.9);border:1px solid var(--line);border-top:10px solid var(--red);border-radius:18px;padding:30px 30px 34px;height:430px"><div class="H" style="font-size:190px;line-height:1;color:var(--red2)">${x[0]}</div><div class="H" style="font-size:52px;line-height:1.05;margin-top:16px">${x[1]}</div><div style="font:400 32px Roboto;font-stretch:75%;color:#c9c9d0;margin-top:10px">${x[2]||'Match ends early'}</div></div>`).join('')}</div>`);
+ const mp=[['3','Takedown','Neutral to control on the mat'],['1','Escape','Bottom gets free to neutral'],['2','Reversal','Bottom comes out on top'],['2–4','Near fall','Back held toward the mat']];
+ sc(21.8,30,`<div class="oh"><div class="k" data-d="0">Match points</div><div class="t H" data-d=".1">Three periods · 2:00 each</div></div>
+  <div style="position:absolute;left:140px;right:140px;top:430px;display:grid;grid-template-columns:repeat(4,1fr);gap:28px">${mp.map((x,i)=>`<div data-d="${.5+i*.3}" style="background:rgba(16,16,20,.9);border:1px solid var(--line);border-top:10px solid #fff;border-radius:18px;padding:30px 30px 34px;height:430px"><div class="H" style="font-size:${x[0].length>1?150:190}px;line-height:1.27;color:#fff">${x[0]}</div><div class="H" style="font-size:56px;line-height:1.05;margin-top:6px;color:var(--red2)">${x[1]}</div><div style="font:400 32px Roboto;font-stretch:75%;color:#c9c9d0;margin-top:10px">${x[2]}</div></div>`).join('')}</div>`);
+ sc(30,42,`<div class="oh"><div class="k" data-d="0">Watch the ref</div><div class="t H" data-d=".1">The signals</div></div>
+  <div id="oplab" style="position:absolute;left:140px;top:450px;width:760px"></div><div id="opref" style="position:absolute;right:220px;top:120px;width:700px;height:933px"></div>`);
+ sc(42,47,`<div class="oh"><div class="k" data-d="0">Penalties</div><div class="t H" data-d=".1">Mistakes cost points</div></div>
+  <div style="position:absolute;left:140px;top:420px;display:grid;grid-template-columns:repeat(2,760px);gap:26px">${['Stalling','Illegal holds','Technical violations','Unsportsmanlike conduct'].map((x,i)=>`<div data-d="${.4+i*.25}" class="H" style="font-size:58px;background:rgba(16,16,20,.9);border:1px solid var(--line);border-left:10px solid var(--red);border-radius:14px;padding:26px 34px">${x}</div>`).join('')}</div>
+  <div data-d="1.6" style="position:absolute;left:140px;top:760px;font:400 44px Roboto;font-stretch:75%;color:#d0d0d6">Each one hands points to the opponent. Watch for the call.</div>`);
+ sc(47,52,`<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center"><img data-d="0" data-k="s" src="${KRAZO}" style="height:300px"><div data-d=".3" class="H" style="font-size:200px;line-height:1;margin-top:20px">Let's wrestle</div><div data-d=".6" class="H" style="font-size:70px;color:var(--red2);margin-top:10px">Go Tigers</div></div>`);
+ const refHost=op.querySelector('#opref');const rf=new Ref(refHost,'0 -150 700 933');rf.svg.style.cssText='width:700px;height:933px';const lab=op.querySelector('#oplab');
+ const sigs=[[30.4,'Takedown','Three fingers up: 3 points.'],[33.6,'Near fall','A sideways swipe counts each second. Then the points go up.'],[39.2,'Fall','A slap on the mat. Match over.']];
+ const NF=nfFrames(33.6);
+ const refFrames=[[30,REST],[30.9,UP(3)],[33.2,UP(3)],...NF.slice(1).map(([tt,v])=>[tt,v]),[39.4,UP(0,0)],[39.4,{...UP(0),Rm:'flat'}],[40.1,{L:REST.L,R:[520,760],Rm:'flat'}],[41.6,{L:REST.L,R:[520,760],Rm:'flat'}]];
+ const st={};
+ return t=>{scenes.forEach(s=>{const vis=t>=s.a-.01&&t<s.b;s.e.style.display=vis?'block':'none';if(!vis)return;const lt=t-s.a,len=s.b-s.a;s.items.forEach(it=>{const d=+it.dataset.d;const pin=eo(prog(lt,d,.6)),pout=eio(prog(lt,len-.5,.4));it.style.opacity=pin*(1-pout);it.style.transform=it.dataset.k==='s'?`scale(${.7+.3*pin})`:`translateY(${(1-pin)*50}px)`})});
+  if(t>=30&&t<42){rf.set(kf(t,refFrames));const cur=[...sigs].reverse().find(s=>t>=s[0])||sigs[0];const out=eio(prog(t,41.5,.4));lab.innerHTML=`<div class="H" style="font-size:120px;line-height:1;color:var(--red2)">${cur[1]}</div><div style="font:400 46px/1.3 Roboto;font-stretch:75%;color:#e6e6ea;margin-top:20px">${cur[2]}</div>`+nfCount(t,33.6,'opener');lab.style.opacity=(1-out)*eo(prog(t,30.4,.5));refHost.style.opacity=(1-out)*eo(prog(t,30.2,.5));
+   if(t>=40.1&&t<40.6)flash(rf,520,760,(t-40.1)/.5);else rf.fx.innerHTML=''}
+  s1.style.transform=`skewX(-16deg) translateX(${Math.sin(t*.4)*30}px)`}}};
+
+function flash(rf,x,y,u){rf.fx.innerHTML='';S('ellipse',{cx:x,cy:y,rx:30+260*u,ry:10+70*u,fill:'none',stroke:'#fff','stroke-width':10,opacity:1-u},rf.fx);S('rect',{x:-200,y:y+8,width:1100,height:14,fill:'#E31B23',opacity:.9},rf.fx)}
+// near-fall: sideways swipes, 1 per second x4, then 4 fingers overhead
+function nfFrames(t0){const inn={L:REST.L,R:[400,450],Rm:'flat'},out={L:REST.L,R:[775,400],Rm:'flat'};const fr=[[t0-.4,REST],[t0+.2,inn]];for(let i=0;i<4;i++){fr.push([t0+.2+i+.55,out]);fr.push([t0+.2+i+1,inn])}fr.push([t0+4.7,UP(4)]);fr.push([t0+5.5,UP(4)]);return fr}
+function nfCount(t,t0,mode){const c=Math.floor(t-(t0+.2))+1;if(t<t0+.2||t>t0+5.5)return '';if(c>4&&t<t0+4.6)return c>4?'':`<div class="H" style="font-size:${mode?220:200}px;line-height:1;margin-top:20px">${c}<span style="font-size:.3em;color:#9a9aa3;margin-left:16px">SEC</span></div>`;if(t>=t0+4.6)return `<div class="H" style="font-size:${mode?160:140}px;line-height:1;margin-top:20px;color:var(--red2)">+4</div>`;return ''}
+
+// ---- explainers (side panel) ----
+CL['explain-team-points']={dur:14,build(){const p=panel(90,140,860,'auto','Dual meet scoring','Team points','Per match won');rows(p,[['6','Fall','Also forfeit, default or DQ'],['5','Technical fall','Win by 15 or more'],['4','Major decision','Win by 8 to 14'],['3','Decision','Win by 1 to 7']],.6,.3)}};
+CL['explain-match-points']={dur:14,build(){const p=panel(90,140,860,'auto','Match scoring','Match points','Three periods · 2:00 each');rows(p,[['3','Takedown','Neutral to control on the mat'],['1','Escape','Bottom gets free to neutral'],['2','Reversal','Bottom comes out on top'],['2–4','Near fall','Back held toward the mat, 2–4 sec']],.6,.3)}};
+CL['explain-margins']={dur:14,build(){const p=panel(90,140,860,'auto','Ways to win','Win by how much?');rows(p,[['1–7','Decision','3 team points'],['8–14','Major decision','4 team points'],['15+','Technical fall','5 team points · match ends'],['PIN','Fall','6 team points · match ends']],.6,.3);[...p.querySelectorAll('.rowp .v')].forEach(v=>{v.style.fontSize='64px';v.style.minWidth='170px'})}};
+CL['explain-positions']={dur:15,build(){const p=panel(90,140,860,'auto','The three positions','Who starts where?');rows(p,[['P1','Neutral','Both on their feet. Every match starts here.'],['P2','Choice','Ref flips a red/green disc. Winner picks top, bottom, neutral or defer.'],['P3','Other choice','The other wrestler picks the position.']],.6,.35);note(p,'Defer = save your choice for period 3.',1.8)}};
+CL['explain-overtime']={dur:14,build(){const p=panel(90,140,860,'auto','Overtime','Tied after 3?');rows(p,[['1:00','Sudden victory','Starts neutral. First points win.'],['0:30','Two tiebreakers','Each wrestler picks the position for one.'],['0:30','Ultimate tiebreaker','Choice goes to whoever scored first.']],.6,.35);[...p.querySelectorAll('.rowp .v')].forEach(v=>{v.style.fontSize='70px';v.style.minWidth='170px'})}};
+CL['explain-penalties']={dur:15,build(){const p=panel(90,140,1000,'auto','Penalties','Points for the opponent');
+ const b=H('<div class="body"></div>');p.appendChild(b);[['Stalling',['W','1','1','2','DQ']],['Illegal hold · technical violation<br>roughness · unsportsmanlike',['1','1','2','DQ']],['Caution · false start',['C','C','1','1','1']]].forEach((r,i)=>{const e=H(`<div class="rowp" style="justify-content:space-between"><div class="k" style="font-size:38px">${r[0]}</div><div style="display:flex;gap:8px">${r[1].map(c=>`<div class="chip" style="width:76px;height:96px"><b class="${c==='DQ'?'dq':c.length>1?'w':''}" style="font-size:${c==='W'||c==='C'?22:48}px">${c==='W'?'WARN':c==='C'?'CAUT.':c}</b></div>`).join('')}</div></div>`);b.appendChild(e);reg(e,.6+i*.3)});
+ note(p,'Illegal holds, technical violations, unnecessary roughness and unsportsmanlike conduct share one running count.',1.8)}};
+
+// ---- react: scoring with referee ----
+function sigClip(title,sub,lines,frames,extra,dur=8){return{dur,build(){const {rf,box}=refPanel(title,sub,lines);const st={};const ptsEl=H('<div class="pts" style="left:44px;bottom:26px;font-size:190px;line-height:1;opacity:0;transform-origin:left bottom"></div>');box.parentNode.appendChild(ptsEl);
+ return t=>{rf.set(kf(t,frames));if(extra)extra(t,{rf,box,ptsEl,st})}}}}
+const showPts=(el,t,a,txt)=>{const p=eo(prog(t,a,.4))*(1-eio(prog(t,DUR-.8,.4)));el.textContent=txt;el.style.opacity=p;el.style.transform=`scale(${.6+.4*p})`};
+CL['ref-takedown']=sigClip('Takedown','+3 points',['From neutral, the wrestler takes the opponent to the mat and gains control.','Ref: arm up, three fingers.'],[[0,REST],[1,UP(3)],[1.8,UP(3,14)],[2.6,UP(3,-10)],[3.4,UP(3)],[7,UP(3)],[7.6,REST]],(t,o)=>showPts(o.ptsEl,t,1.2,'+3'));
+CL['ref-escape']=sigClip('Escape','+1 point',['The bottom wrestler breaks free and gets back to neutral.','Ref: arm up, one finger.'],[[0,REST],[1,UP(1)],[1.8,UP(1,14)],[2.6,UP(1,-10)],[3.4,UP(1)],[7,UP(1)],[7.6,REST]],(t,o)=>showPts(o.ptsEl,t,1.2,'+1'));
+CL['ref-reversal']=sigClip('Reversal','+2 points',['The bottom wrestler comes out on top, in control.','Ref: arm up, two fingers.'],[[0,REST],[1,UP(2)],[1.8,UP(2,14)],[2.6,UP(2,-10)],[3.4,UP(2)],[7,UP(2)],[7.6,REST]],(t,o)=>showPts(o.ptsEl,t,1.2,'+2'));
+CL['ref-near-fall']=sigClip('Near fall','2, 3 or 4 points',['Back held at 45° or less, or both shoulders within 4 inches of the mat.','Ref swipes sideways once per second: 2 sec = 2 · 3 sec = 3 · 4 sec = 4.'],nfFrames(.9).concat([[9.4,UP(4)],[10,REST]]),(t,o)=>{const c=Math.floor(t-1.1)+1;if(t>=1.1&&t<5.1){o.ptsEl.style.opacity=1;o.ptsEl.style.transform='none';o.ptsEl.style.color='#fff';o.ptsEl.innerHTML=`${Math.min(c,4)}<span style="font-size:.28em;color:#9a9aa3"> SEC</span>`}else if(t>=5.1){o.ptsEl.style.color='';showPts(o.ptsEl,t,5.3,'+4')}else o.ptsEl.style.opacity=0},10.5);
+CL['ref-fall']=sigClip('Fall','Match over · +6 team points',['Both shoulders held to the mat for 2 seconds.','Ref: slaps the mat.'],[[0,REST],[1,{...UP(0),Rm:'flat'}],[2.2,{...UP(0),Rm:'flat'}],[2.7,{L:REST.L,R:[540,760],Rm:'flat'}],[7,{L:REST.L,R:[540,760],Rm:'flat'}],[7.6,REST]],(t,o)=>{if(t>=2.7&&t<3.3)flash(o.rf,540,770,(t-2.7)/.6);else o.rf.fx.innerHTML='';showPts(o.ptsEl,t,2.9,'+6')});
+CL['ref-stalemate']=sigClip('Stalemate','No points · restart',['Neither wrestler can improve position, so the ref stops and restarts the action.','Ref: closed fists together in front of the chest.'],[[0,REST],[1,{L:[318,450],R:[382,450],Lm:'thumb',Rm:'thumb'}],[7,{L:[318,450],R:[382,450],Lm:'thumb',Rm:'thumb'}],[7.6,REST]]);
+
+// ---- results (lower third) ----
+const RES=[['fall','Fall','Pinned · both shoulders down 2 seconds','6'],['tech-fall','Technical fall','Won by 15 or more points','5'],['major-decision','Major decision','Won by 8 to 14 points','4'],['decision','Decision','Won by 1 to 7 points','3'],['forfeit','Forfeit','No opponent at this weight','6'],['default','Default','Opponent unable to continue','6'],['disqualification','Disqualification','Opponent disqualified','6']];
+RES.forEach(r=>CL['result-'+r[0]]={dur:7,build(){const e=l3('Result',r[1],r[2],bigPts('+'+r[3],'Team points'));reg(e.querySelector('.big'),.5,'s')}});
+
+// ---- penalties (lower third) ----
+const SHARED='Shares a count with illegal holds, technical violations, roughness and unsportsmanlike conduct';
+const PEN=[['stalling','Stalling','Not wrestling aggressively or avoiding action',['W','1','1','2','DQ'],'Stalling has its own count'],
+ ['illegal-hold','Illegal hold','A hold that endangers a wrestler, like a slam or full nelson',['1','1','2','DQ'],SHARED],
+ ['technical-violation','Technical violation','Like locked hands, fleeing the mat, or grabbing clothing or headgear',['1','1','2','DQ'],SHARED],
+ ['unnecessary-roughness','Roughness','Unnecessary roughness: force beyond normal wrestling',['1','1','2','DQ'],SHARED],
+ ['unsportsmanlike','Unsportsmanlike','Taunting, swearing, or disrespecting an opponent or official',['1','1','2','DQ'],SHARED],
+ ['caution','Caution','False start or incorrect starting position',['C','C','1','1','1'],'Two free cautions, then a point each time'],
+ ['flagrant-misconduct','Flagrant misconduct','A serious act of unsportsmanlike conduct or violence',['DQ'],'Wrestler is disqualified immediately']];
+PEN.forEach(r=>CL['penalty-'+r[0]]={dur:8,build(){const e=l3('Penalty',r[1],r[2]+`<div class="sub">${r[4]}</div>`,chart(r[3]));[...e.querySelectorAll('.chip')].forEach((c,i)=>reg(c,.55+i*.12,'s'))}});
+CL['info-potentially-dangerous']={dur:7,build(){l3('Ref stop','Potentially dangerous','The ref stops the action before a hold can become illegal.',bigPts('0','Points','Wrestling restarts'))}};
+
+/* ---------------- runtime: plays clips on command from the control panel ---------------- */
+const root=document.getElementById('root');let RENDER=null;
+function load(id){root.innerHTML='';REG=[];const c=CL[id];DUR=c.dur;document.body.classList.toggle('bg',QS.has('bg'));RENDER=c.build()||null;window.R(0)}
+window.R=t=>{applyReg(t);if(RENDER)RENDER(t)};
+const QS=new URLSearchParams(location.search);
+function fit(){const st=document.getElementById('stage');const s=Math.min(innerWidth/1920,innerHeight/1080)||1;st.style.transform=`scale(${s})`}
+addEventListener('resize',fit);fit();
+let playing=null,t0=0;
+function play(id){if(!CL[id])return false;load(id);playing=id;t0=performance.now();return true}
+function clearNow(){if(!playing)return;const t=(performance.now()-t0)/1000;const out=DUR-.75;if(t<out)t0=performance.now()-out*1000}
+(function frame(){if(playing){const t=(performance.now()-t0)/1000;if(t>=DUR){root.innerHTML='';REG=[];RENDER=null;playing=null;if(QS.get('loop')&&QS.get('test'))play(QS.get('test'))}else R(t)}requestAnimationFrame(frame)})();
+if(QS.get('test'))play(QS.get('test'));
+if(!QS.has('nosync')){
+ import('/pt/pt-sync.js').then(({listen,write})=>{
+  const dbg=QS.has('debug')?Object.assign(document.body.appendChild(document.createElement('div')),{id:'dbg'}):null;
+  let base,lastNonce=0,lastClip='',link='connecting';
+  const beat=()=>write('status',{alive:Date.now(),nonce:lastNonce,clip:lastClip,link}).catch(()=>{});
+  listen('live',d=>{
+    if(base===undefined){base=d?d.nonce:0;beat();return}
+    if(!d||d.nonce===base)return;base=d.nonce;lastNonce=d.nonce;lastClip=d.clip;
+    if(d.clip==='__clear__')clearNow();else play(d.clip);
+    beat();
+  },st=>{link=st;if(dbg)dbg.textContent='PT overlay · '+st+(playing?' · '+playing:'')});
+  setInterval(beat,5000);
+ }).catch(e=>console.warn('[pt] sync failed',e));
+}
+</script></body></html>

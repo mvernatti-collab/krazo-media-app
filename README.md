@@ -97,3 +97,18 @@ school crew tool this is a reasonable tradeoff for simplicity, but if you want i
 hardened: add Firebase Anonymous Auth on load, store an `isAdmin` custom claim or a
 separate `admins` collection, and update `firestore.rules` to check `request.auth`
 instead of `if true`. Ask if you want help with that later.
+
+---
+
+## Production Truck graphics (wrestling)
+
+Two static pages in `public/pt/` let you push broadcast graphics into Hudl Production Truck with one click.
+
+- **Control panel:** `https://krazomedia.com/pt/control.html` (laptop, Chromebook, phone or tablet)
+- **Overlay:** `https://krazomedia.com/pt/overlay.html`. Add it in Production Truck as an HTML/web graphic at 1920×1080 and leave it on.
+
+Clicking a button writes the `pt/live` doc in Firestore. The overlay listens to it, plays that graphic and reports back on `pt/status`, which turns the control panel's **Overlay** light green and shows "✓ Overlay received it."
+
+- If Production Truck's built-in web renderer can't hold the Firebase live connection, the overlay falls back to polling Firestore once a second. That's up to about 3,600 reads an hour, well within the free tier for a normal event.
+- `overlay.html?test=ref-near-fall&bg=1` plays one clip locally for previewing. Add `&debug=1` to show the connection state.
+- Each graphic is defined in `overlay.html` (the `CL` object). Buttons are listed in `control.html` (`GROUPS`).
