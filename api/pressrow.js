@@ -108,7 +108,39 @@ const SHIM = (debug, gameId, prefix) => String.raw`<script>
 })();
 </script>`;
 
-export function transform(html, host, debug) {
+const ANCHORS = ["top", "top-left", "top-right", "bottom", "bottom-left", "bottom-right"];
+const num = (v, lo, hi) => { const n = parseFloat(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null; };
+
+// Placement options (all optional, in 1920×1080 pixels):
+//   sb=top|top-left|top-right|bottom|bottom-left|bottom-right   scoreboard corner
+//   sbx, sby     nudge the scoreboard        sbscale   resize it (e.g. 0.8)
+//   cardx, cardy nudge stat cards           cardscale resize them
+export function placementCss(o = {}) {
+  const css = [];
+  const sbx = num(o.sbx, -1900, 1900) || 0, sby = num(o.sby, -1060, 1060) || 0, sbs = num(o.sbscale, 0.2, 3);
+  if (sbx || sby) css.push(`#stack{transform:translate(${sbx}px,${sby}px)!important}`);
+  if (sbs) css.push(`#sb-region{transform:scale(${sbs})!important;transform-origin:${o.sb && /left/.test(o.sb) ? "left" : o.sb && /right/.test(o.sb) ? "right" : "center"} ${o.sb && /bottom/.test(o.sb) ? "bottom" : "top"}!important}`);
+  const cx = num(o.cardx, -1900, 1900) || 0, cy = num(o.cardy, -1060, 1060) || 0, cs = num(o.cardscale, 0.2, 3);
+  if (cx || cy) css.push(`#card-layer{transform:translate(${cx}px,${cy}px)!important}`);
+  if (cs) css.push(`#card-region{transform:scale(calc(var(--card-scale,1.3) * ${cs}))!important}`);
+  return css.length ? `<style id="krazo-placement">${css.join("")}</style>` : "";
+}
+
+export function applyAnchor(html, anchor) {
+  if (!ANCHORS.includes(anchor)) return html;
+  let out = html.replace(/const STACK_CONFIG = (\{[^;]*\});/, (m, j) => {
+    try { const c = JSON.parse(j); c.stackAnchor = anchor; return `const STACK_CONFIG = ${JSON.stringify(c)};`; } catch { return m; }
+  });
+  const side = anchor.startsWith("bottom") ? "bottom" : "top";
+  const x = anchor.endsWith("-left") ? "start" : anchor.endsWith("-right") ? "end" : "center";
+  out = out.replace(/<body([^>]*)class="([^"]*)"/i, (m, pre, cls) => {
+    const kept = cls.split(/\s+/).filter((c) => c && !/^stack-(top|bottom|x-start|x-center|x-end)$/.test(c));
+    return `<body${pre}class="${[...kept, "stack-" + side, "stack-x-" + x].join(" ")}"`;
+  });
+  return out;
+}
+
+export function transform(html, host, debug, opts = {}) {
   const key = HOSTS[host];
   const prefix = `/prx/${key}`;
   let out = html.split(`https://${host}`).join(prefix);
@@ -124,8 +156,10 @@ export function transform(html, host, debug) {
   const noAnim = '<style id="krazo-no-anim">*,*::before,*::after{animation:none!important;transition:none!important}</style>';
   if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, (m) => m + shim);
   else out = shim + out;
-  if (/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, noAnim + '</head>');
-  else out = noAnim + out;
+  out = applyAnchor(out, opts.sb);
+  const place = placementCss(opts);
+  if (/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, noAnim + place + '</head>');
+  else out = noAnim + place + out;
   return out;
 }
 
@@ -140,7 +174,9 @@ export default async function handler(req, res) {
     const html = await r.text();
     res.setHeader("content-type", "text/html; charset=utf-8");
     res.setHeader("cache-control", "no-store");
-    res.status(r.status).send(transform(html, target.host, debug));
+    const q = req.query || {};
+    const opts = { sb: q.sb, sbx: q.sbx, sby: q.sby, sbscale: q.sbscale, cardx: q.cardx, cardy: q.cardy, cardscale: q.cardscale };
+    res.status(r.status).send(transform(html, target.host, debug, opts));
   } catch (e) {
     res.status(502).send("Couldn't reach Press Row: " + e.message);
   }
