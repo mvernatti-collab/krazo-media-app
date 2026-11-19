@@ -132,3 +132,12 @@ Placement options (add to the address, measured in 1920×1080 pixels):
 | `sbscale` | Resize the scoreboard | `&sbscale=0.85` |
 | `cardx`, `cardy` | Nudge stat cards | `&cardy=200` |
 | `cardscale` | Resize stat cards | `&cardscale=0.8` |
+
+## Wrestling Press Row (our own scorer + PT overlay)
+
+- **Scorer (tablet/laptop at the table):** `/pt/wrestle/score.html`
+- **PT overlay (HTML Embed, fullscreen):** `/pt/wrestle/overlay.html`
+  - `?pos=bl|br|tl|tr` puts the scorebug in a corner (default bottom-left)
+  - `?demo=1` shows sample data, `?bg=1` adds a green test background, `?debug=1` shows a status box
+- Syncs through Firestore doc `pt/wrestle`. The overlay writes a heartbeat to `pt/wrestle-status` (that drives the scorer's "Overlay online" pill).
+- The overlay follows the PT-safe rules: no CSS animation, filters, shadows, rounded corners or partial opacity; script-driven slides only.

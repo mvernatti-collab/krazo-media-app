@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Wrestling Scorer · Krazo Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<style>
+:root{--red:#E31B23;--bg:#0c0c0f;--card:#17171c;--line:#2b2b32;--mute:#9a9aa3;--g:#16A34A;--r:#DC2626}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif}
+.H{font-family:Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-weight:400}
+header{position:sticky;top:0;z-index:5;background:#0c0c0ff2;border-bottom:1px solid var(--line);padding:8px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+header img{height:30px}
+header .t{font-size:22px}
+.pill{font:700 12px -apple-system,Arial;letter-spacing:.06em;text-transform:uppercase;padding:5px 9px;border-radius:999px;background:#222229;color:#bbb}
+.pill.ok{background:#12351f;color:#7ee2a0}.pill.bad{background:#3a1414;color:#ff9a9a}.pill.warn{background:#3a2e10;color:#ffd27a}
+.sp{flex:1}
+button{font:inherit;color:#fff;background:#24242b;border:1px solid #34343c;border-radius:10px;padding:10px 12px;cursor:pointer;touch-action:manipulation}
+button:active{transform:scale(.97)}
+button.red{background:var(--red);border-color:var(--red)}
+button.ghost{background:transparent}
+button.on{outline:3px solid #fff}
+main{padding:12px;max-width:1100px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bout{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+.wt{font-size:44px;line-height:1}
+.wt small{font-size:18px;color:var(--mute)}
+.dual{font-size:30px;text-align:right}
+.clockbox{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+.clock{font-size:84px;line-height:1;text-align:center;font-variant-numeric:tabular-nums}
+.clock.run{color:#7ee2a0}
+.per{display:flex;gap:6px;flex-wrap:wrap}
+.per button{padding:8px 10px;min-width:54px}
+.sides{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.side{border-radius:14px;padding:10px;border:2px solid var(--line);background:var(--card)}
+.side.h{border-color:var(--g)}.side.a{border-color:var(--r)}
+.side .top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.band{width:16px;height:44px;border-radius:4px}
+.side .nm{flex:1;min-width:0}
+.side .nm input{width:100%;background:#0e0e12;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;font-size:17px}
+.side .nm div{font-size:13px;color:var(--mute);margin-top:3px}
+.side .pts{font-size:64px;line-height:1;min-width:70px;text-align:center}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.grid button{padding:14px 6px;font-size:15px;font-weight:700}
+.grid button b{display:block;font-family:Anton,Impact,sans-serif;font-weight:400;font-size:26px}
+.pen{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.pen button{font-size:13px;padding:10px 4px;background:#2a2016;border-color:#4a3a20}
+.pen button span{display:block;color:#ffd27a;font-size:11px;margin-top:2px}
+.lbl{font:700 12px -apple-system,Arial;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin:2px 0 8px}
+.res{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.res button{padding:12px 4px;font-weight:700}
+.res button span{display:block;font-size:11px;color:var(--mute);font-weight:400}
+input,select,textarea{background:#0e0e12;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;font-size:15px;font-family:inherit}
+textarea{width:100%;min-height:200px;font-family:Menlo,monospace;font-size:13px}
+details summary{cursor:pointer;font-weight:700;padding:4px 0}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl td{padding:6px 4px;border-bottom:1px solid var(--line)}
+.tbl td.w{color:#7ee2a0;font-weight:700}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#fff;color:#000;padding:10px 16px;border-radius:999px;font-weight:700;display:none;z-index:20}
+@media (max-width:760px){.sides{grid-template-columns:1fr}.clock{font-size:64px}.res{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <img src="/pt/krazo.png" alt="Krazo Media">
+  <div class="t H">Wrestling Scorer</div>
+  <div class="pill" id="pLink">Connecting</div>
+  <div class="pill" id="pOver">Overlay ?</div>
+  <div class="sp"></div>
+  <button id="undo" class="ghost">↶ Undo</button>
+</header>
+<main>
+  <div class="card bout">
+    <button id="prevW" aria-label="Previous weight">◀</button>
+    <div>
+      <div class="wt H"><span id="wt">106</span> <small>lbs · bout <span id="boutN">1</span> of <span id="boutT">14</span></small></div>
+    </div>
+    <button id="nextW" aria-label="Next weight">▶</button>
+    <div style="grid-column:1/-1" class="row">
+      <div class="dual H" style="flex:1;text-align:left"><span id="dH">OZK</span> <span id="dHs">0</span> – <span id="dAs">0</span> <span id="dA">OPP</span></div>
+      <button id="tpMinusH" title="Team point deduction (home)">−1 <span id="tpH">OZK</span></button>
+      <button id="tpMinusA" title="Team point deduction (away)">−1 <span id="tpA">OPP</span></button>
+    </div>
+  </div>
+
+  <div class="card clockbox">
+    <div>
+      <div class="clock H" id="clock">2:00</div>
+      <div class="per" id="periods"></div>
+    </div>
+    <div class="row" style="flex-direction:column">
+      <button id="startStop" class="red H" style="font-size:28px;padding:18px 26px">Start</button>
+      <div class="row"><button id="minus1">−1s</button><button id="plus1">+1s</button></div>
+    </div>
+  </div>
+
+  <div class="sides">
+    <div class="side h" id="sideH"></div>
+    <div class="side a" id="sideA"></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="lbl">End match: tap the winner's result</div>
+    <div class="row" style="margin-bottom:8px">
+      <button id="winH" class="on">Winner: <span id="winHn">Home</span></button>
+      <button id="winA">Winner: <span id="winAn">Away</span></button>
+      <span style="color:var(--mute);font-size:13px">Suggested: <b id="sugg">—</b></span>
+    </div>
+    <div class="res" id="results"></div>
+  </div>
+
+  <div class="card">
+    <div class="lbl">Graphics</div>
+    <div class="row">
+      <button id="gBug">Scorebug: on</button>
+      <button id="gNext">Up next card</button>
+      <button id="gDual">Dual summary card</button>
+      <button id="gClear" class="ghost">Hide cards</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Dual setup (teams, colors, lineup)</summary>
+      <div class="row" style="margin-top:10px">
+        <label>Home <input id="hName" size="10"> <input id="hShort" size="4" maxlength="4"> <input id="hColor" type="color"></label>
+        <label>Away <input id="aName" size="10"> <input id="aShort" size="4" maxlength="4"> <input id="aColor" type="color"></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label>Weights <select id="division"><option value="boys">Boys (106–285)</option><option value="girls">Girls (100–235)</option></select></label>
+        <label><input type="checkbox" id="swapBands"> Home wears red band (swap)</label>
+      </div>
+      <div class="lbl" style="margin-top:12px">Lineup: one line per weight · weight, home wrestler, away wrestler</div>
+      <textarea id="lineup" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="saveSetup" class="red">Save setup</button>
+        <button id="newDual" class="ghost">Start a new dual (clears results)</button>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <div class="lbl">Bout results</div>
+    <table class="tbl" id="boutTbl"></table>
+  </div>
+
+  <div class="card" style="font-size:13px;color:var(--mute)">
+    Overlay URL for Production Truck (HTML Embed, Fullscreen):<br>
+    <code id="ourl"></code>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { write, listen } from "/pt/pt-sync.js";
+import { DOC, WEIGHTS, PERIODS, periodById, RESULTS, suggestResult, blankMatch, defaultState, remaining, fmtClock, matchElapsed, fmtElapsed, pack, unpack, other, bandHex } from "/pt/wrestle/core.js";
+
+let S = defaultState();
+let loaded = false;
+const hist = [];
+const $ = (id) => document.getElementById(id);
+const toast = (t) => { const e = $("toast"); e.textContent = t; e.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => (e.style.display = "none"), 1600); };
+
+// ---- persistence ----
+function save(snapshot = true) {
+  S.v = (S.v || 0) + 1;
+  render();
+  write(DOC, pack(S)).catch(() => toast("Couldn't send. Check connection."));
+  try { localStorage.setItem("krazo-wrestle", JSON.stringify(S)); } catch {}
+}
+function change(fn) {
+  hist.push(JSON.stringify(S)); if (hist.length > 60) hist.shift();
+  fn(); save();
+}
+$("undo").onclick = () => {
+  if (!hist.length) return toast("Nothing to undo");
+  const keepPop = S.pop.n, keepRes = S.res.n;
+  S = JSON.parse(hist.pop());
+  S.pop.n = Math.max(S.pop.n, keepPop); S.res.n = Math.max(S.res.n, keepRes); // never re-fire old graphics
+  save(); toast("Undone");
+};
+
+// ---- helpers ----
+const wt = () => S.weights[S.idx];
+const names = () => S.lineup[wt()] || { h: "", a: "" };
+const sideTeam = (s) => (s === "h" ? S.home : S.away);
+function pop(side, text, pts) { S.pop = { n: (S.pop.n || 0) + 1, side, text, pts: pts || 0, wt: wt() }; }
+function addPts(side, n, text) { change(() => { S.m[side] += n; pop(side, text, n); }); }
+
+// penalties: offender side; points go to the opponent
+function penalty(kind, off) {
+  change(() => {
+    const opp = other(off), c = S.m.pen[off];
+    if (kind === "stall") {
+      c.stall++;
+      const seq = [0, 1, 1, 2]; // warning, 1, 1, 2, then DQ
+      if (c.stall === 1) pop(off, "STALLING · WARNING", 0);
+      else if (c.stall <= 4) { const p = seq[c.stall - 1]; S.m[opp] += p; pop(opp, "STALLING · +" + p, p); }
+      else pop(off, "STALLING · DQ", 0);
+    } else if (kind === "pen") {
+      c.pen++;
+      const seq = [1, 1, 2]; // 1, 1, 2, then DQ
+      if (c.pen <= 3) { const p = seq[c.pen - 1]; S.m[opp] += p; pop(opp, "PENALTY · +" + p, p); }
+      else pop(off, "PENALTY · DQ", 0);
+    } else if (kind === "caut") {
+      c.caut++;
+      if (c.caut <= 2) pop(off, "CAUTION " + c.caut, 0);
+      else { S.m[opp] += 1; pop(opp, "CAUTION · +1", 1); }
+    }
+  });
+}
+
+function sideHtml(s) {
+  const t = sideTeam(s), n = names();
+  return `<div class="top"><div class="band" style="background:${bandHex(S.bands[s])}"></div>
+    <div class="nm"><input data-name="${s}" value="${(n[s] || "").replace(/"/g, "&quot;")}" placeholder="${t.name} wrestler"><div>${t.name} · ${S.bands[s]} band</div></div>
+    <div class="pts H">${S.m[s]}</div></div>
+    <div class="grid">
+      <button data-pts="${s}:3:TAKEDOWN"><b>TD</b>+3</button>
+      <button data-pts="${s}:1:ESCAPE"><b>E</b>+1</button>
+      <button data-pts="${s}:2:REVERSAL"><b>R</b>+2</button>
+      <button data-pts="${s}:2:NEAR FALL"><b>NF</b>+2</button>
+      <button data-pts="${s}:3:NEAR FALL"><b>NF</b>+3</button>
+      <button data-pts="${s}:4:NEAR FALL"><b>NF</b>+4</button>
+    </div>
+    <div class="lbl" style="margin-top:10px">${t.short} committed</div>
+    <div class="pen">
+      <button data-pen="stall:${s}">Stalling<span>${["warn next", "+1 opp next", "+1 opp next", "+2 opp next", "DQ next"][Math.min(S.m.pen[s].stall, 4)]}</span></button>
+      <button data-pen="pen:${s}">Penalty<span>${["+1 opp next", "+1 opp next", "+2 opp next", "DQ next"][Math.min(S.m.pen[s].pen, 3)]}</span></button>
+      <button data-pen="caut:${s}">Caution<span>${S.m.pen[s].caut < 2 ? "free" : "+1 opp next"}</span></button>
+    </div>
+    <div class="row" style="margin-top:8px"><button data-adj="${s}:-1" class="ghost">−1 pt</button><button data-adj="${s}:1" class="ghost">+1 pt</button></div>`;
+}
+
+let winner = "h";
+function render() {
+  $("wt").textContent = wt();
+  $("boutN").textContent = S.idx + 1; $("boutT").textContent = S.weights.length;
+  $("dH").textContent = S.home.short; $("dA").textContent = S.away.short;
+  $("tpH").textContent = S.home.short; $("tpA").textContent = S.away.short;
+  $("dHs").textContent = S.team.h; $("dAs").textContent = S.team.a;
+  $("sideH").innerHTML = sideHtml("h"); $("sideA").innerHTML = sideHtml("a");
+  const n = names();
+  $("winHn").textContent = n.h || S.home.short; $("winAn").textContent = n.a || S.away.short;
+  $("winH").classList.toggle("on", winner === "h"); $("winA").classList.toggle("on", winner === "a");
+  const sg = suggestResult(S.m.h, S.m.a); $("sugg").textContent = sg ? RESULTS[sg].label : "—";
+  $("periods").innerHTML = PERIODS.map((p) => `<button data-per="${p.id}" class="${S.m.period === p.id ? "on" : ""}">${p.label}</button>`).join("");
+  $("gBug").textContent = "Scorebug: " + (S.show.bug ? "on" : "off");
+  $("gNext").classList.toggle("on", S.show.next); $("gDual").classList.toggle("on", S.show.dual);
+  $("boutTbl").innerHTML = S.bouts.map((b) => `<tr><td>${b.wt}</td><td class="${b.w === "h" ? "w" : ""}">${b.hn || S.home.short}</td><td class="${b.w === "a" ? "w" : ""}">${b.an || S.away.short}</td><td>${RESULTS[b.type].label}${b.type === "FALL" ? " " + b.time : ""} ${b.score || ""}</td><td>+${b.tp} ${b.w === "h" ? S.home.short : S.away.short}</td></tr>`).join("") || '<tr><td style="color:#777">No bouts finished yet</td></tr>';
+  tick();
+}
+
+// results grid
+$("results").innerHTML = Object.entries(RESULTS).map(([k, r]) => `<button data-res="${k}">${r.label}<span>+${r.tp} team</span></button>`).join("");
+$("winH").onclick = () => { winner = "h"; render(); };
+$("winA").onclick = () => { winner = "a"; render(); };
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.pts) { const [s, n, t] = b.dataset.pts.split(":"); addPts(s, +n, t); }
+  else if (b.dataset.pen) { const [k, s] = b.dataset.pen.split(":"); penalty(k, s); }
+  else if (b.dataset.adj) { const [s, n] = b.dataset.adj.split(":"); change(() => { S.m[s] = Math.max(0, S.m[s] + +n); }); }
+  else if (b.dataset.per) setPeriod(b.dataset.per);
+  else if (b.dataset.res) endMatch(b.dataset.res);
+});
+document.addEventListener("change", (e) => {
+  const i = e.target; if (i.dataset && i.dataset.name) { const s = i.dataset.name; change(() => { (S.lineup[wt()] = S.lineup[wt()] || { h: "", a: "" })[s] = i.value.trim(); }); }
+});
+
+// ---- clock ----
+function setPeriod(id) {
+  change(() => {
+    const cur = periodById(S.m.period);
+    const curIdx = PERIODS.indexOf(cur), newIdx = PERIODS.findIndex((p) => p.id === id);
+    // regulation time used, for fall times
+    if (newIdx > curIdx && curIdx < 3) S.m.elapsedBefore += cur.ms - remaining(S.m);
+    S.m.period = id; S.m.clockMs = periodById(id).ms; S.m.running = false; S.m.at = Date.now();
+  });
+}
+$("startStop").onclick = () => change(() => {
+  const m = S.m;
+  if (m.running) { m.clockMs = remaining(m); m.running = false; } else if (m.clockMs > 0) { m.running = true; }
+  m.at = Date.now();
+});
+const nudge = (d) => change(() => { const m = S.m; m.clockMs = Math.max(0, remaining(m) + d); m.at = Date.now(); });
+$("minus1").onclick = () => nudge(-1000);
+$("plus1").onclick = () => nudge(1000);
+function tick() {
+  const m = S.m, r = remaining(m);
+  $("clock").textContent = fmtClock(r);
+  $("clock").classList.toggle("run", m.running);
+  $("startStop").textContent = m.running ? "Stop" : "Start";
+  if (m.running && r <= 0 && loaded) { change(() => { S.m.clockMs = 0; S.m.running = false; S.m.at = Date.now(); }); toast("Period over"); }
+}
+setInterval(tick, 100);
+
+// ---- end match ----
+function endMatch(type) {
+  const n = names(), w = winner, r = RESULTS[type];
+  const time = fmtElapsed(matchElapsed(S.m));
+  const score = ["DEC", "MD", "TF"].includes(type) ? `${Math.max(S.m.h, S.m.a)}-${Math.min(S.m.h, S.m.a)}` : "";
+  if (!confirm(`${r.label} for ${w === "h" ? n.h || S.home.name : n.a || S.away.name}?\n+${r.tp} team points to ${sideTeam(w).name}.`)) return;
+  change(() => {
+    S.m.running = false; S.m.clockMs = remaining(S.m);
+    S.team[w] += r.tp;
+    S.bouts = S.bouts.filter((b) => b.wt !== wt());
+    S.bouts.push({ wt: wt(), w, type, tp: r.tp, score, time, hn: n.h, an: n.a });
+    S.res = { n: (S.res.n || 0) + 1, wt: wt(), w, type, tp: r.tp, score, time, hn: n.h, an: n.a };
+  });
+  toast(`${r.label} · +${r.tp} ${sideTeam(w).short}`);
+}
+function goBout(i) {
+  if (i < 0 || i >= S.weights.length) return;
+  change(() => { S.idx = i; S.m = blankMatch(); });
+}
+$("prevW").onclick = () => goBout(S.idx - 1);
+$("nextW").onclick = () => goBout(S.idx + 1);
+$("tpMinusH").onclick = () => { if (confirm("Deduct 1 team point from " + S.home.name + "?")) change(() => (S.team.h -= 1)); };
+$("tpMinusA").onclick = () => { if (confirm("Deduct 1 team point from " + S.away.name + "?")) change(() => (S.team.a -= 1)); };
+
+// ---- graphics ----
+$("gBug").onclick = () => change(() => (S.show.bug = !S.show.bug));
+$("gNext").onclick = () => change(() => { S.show.next = !S.show.next; if (S.show.next) S.show.dual = false; });
+$("gDual").onclick = () => change(() => { S.show.dual = !S.show.dual; if (S.show.dual) S.show.next = false; });
+$("gClear").onclick = () => change(() => { S.show.next = false; S.show.dual = false; });
+
+// ---- setup ----
+function fillSetup() {
+  $("hName").value = S.home.name; $("hShort").value = S.home.short; $("hColor").value = S.home.color;
+  $("aName").value = S.away.name; $("aShort").value = S.away.short; $("aColor").value = S.away.color;
+  $("division").value = S.division; $("swapBands").checked = S.bands.h === "red";
+  $("lineup").value = S.weights.map((w) => `${w}, ${(S.lineup[w] || {}).h || ""}, ${(S.lineup[w] || {}).a || ""}`).join("\n");
+}
+$("division").onchange = () => {
+  const ws = WEIGHTS[$("division").value];
+  $("lineup").value = ws.map((w) => `${w}, ${(S.lineup[w] || {}).h || ""}, ${(S.lineup[w] || {}).a || ""}`).join("\n");
+};
+$("saveSetup").onclick = () => change(() => {
+  S.home = { name: $("hName").value.trim() || "Home", short: ($("hShort").value.trim() || "HOM").toUpperCase(), color: $("hColor").value };
+  S.away = { name: $("aName").value.trim() || "Away", short: ($("aShort").value.trim() || "AWY").toUpperCase(), color: $("aColor").value };
+  S.division = $("division").value;
+  S.bands = $("swapBands").checked ? { h: "red", a: "green" } : { h: "green", a: "red" };
+  const lines = $("lineup").value.split("\n").map((l) => l.split(",").map((x) => x.trim())).filter((p) => p[0]);
+  S.weights = lines.map((p) => p[0]);
+  S.lineup = {}; lines.forEach((p) => (S.lineup[p[0]] = { h: p[1] || "", a: p[2] || "" }));
+  if (S.idx >= S.weights.length) S.idx = 0;
+  toast("Setup saved");
+});
+$("newDual").onclick = () => {
+  if (!confirm("Start a new dual? This clears team scores and bout results (keeps teams and lineup).")) return;
+  change(() => { S.team = { h: 0, a: 0 }; S.bouts = []; S.idx = 0; S.m = blankMatch(); });
+};
+
+$("ourl").textContent = location.origin + "/pt/wrestle/overlay.html";
+
+// ---- connect ----
+let lastBeat = 0, prevAlive;
+listen(DOC, (d) => {
+  const s = unpack(d);
+  if (!loaded) {
+    loaded = true;
+    if (s && s.v) { S = s; } else {
+      try { const l = JSON.parse(localStorage.getItem("krazo-wrestle")); if (l) S = l; } catch {}
+      save();
+    }
+    fillSetup(); render(); return;
+  }
+  if (s && s.v > S.v) { S = s; fillSetup(); render(); } // another scorer device made a change
+}, (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live link" : st === "polling" ? "Backup link" : "No connection"; });
+listen("wrestle-status", (d) => { if (!d) return; if (prevAlive !== undefined && d.alive !== prevAlive) lastBeat = performance.now(); prevAlive = d.alive; }, () => {}, 3000);
+setInterval(() => { const ok = lastBeat && performance.now() - lastBeat < 15000; const p = $("pOver"); p.className = "pill " + (ok ? "ok" : "bad"); p.textContent = ok ? "Overlay online" : "Overlay offline"; }, 1000);
+render();
+</script>
+</body>
+</html>

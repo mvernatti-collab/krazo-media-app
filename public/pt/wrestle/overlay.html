@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920">
+<title>Krazo Wrestling Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<style>
+/* PT-safe: no CSS animations/transitions, no filters, no shadows, no rounded
+   corners, no partial opacity. Everything moves with script-driven transforms. */
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+body.bg{background:#3d5a2e}
+#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden}
+.H{font-family:Anton,Impact,'Arial Narrow',sans-serif;text-transform:uppercase;font-weight:400;letter-spacing:.01em}
+.clipbox{position:absolute;overflow:hidden}
+.slide{position:absolute;left:0;top:0;right:0;bottom:0}
+
+/* scorebug */
+#bugBox{left:60px;bottom:56px;width:780px;height:262px}
+#bug{background:#0d0d10;color:#fff}
+#bug .hdr{display:flex;height:52px;background:#E31B23}
+#bug .hdr div{display:flex;align-items:center;font-size:34px;padding:0 20px}
+#bug .hdr .wt{background:#0d0d10}
+#bug .hdr .per{margin-left:auto;background:#1b1b20}
+#bug .hdr .clk{width:150px;justify-content:center;background:#fff;color:#0d0d10;font-variant-numeric:tabular-nums}
+#bug .rowW{display:flex;height:76px;border-top:4px solid #0d0d10}
+#bug .band{width:16px}
+#bug .tm{width:120px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff}
+#bug .nm{flex:1;display:flex;align-items:center;padding:0 22px;font-size:42px;white-space:nowrap;overflow:hidden;background:#17171c}
+#bug .pt{width:120px;display:flex;align-items:center;justify-content:center;font-size:62px;background:#0d0d10}
+#bug .ftr{display:flex;height:50px;align-items:center;background:#24242b;font-size:30px;padding:0 20px;gap:16px;border-top:4px solid #0d0d10}
+#bug .ftr .lab{color:#b9b9c2;font-size:24px;letter-spacing:.14em}
+#bug .ftr .ts{display:flex;align-items:center;gap:10px}
+#bug .ftr .sq{width:14px;height:30px}
+
+/* pop-up above the bug */
+#popBox{left:60px;bottom:322px;width:780px;height:96px}
+#pop{display:flex;color:#fff}
+#pop .side{width:16px}
+#pop .txt{flex:1;display:flex;align-items:center;padding:0 24px;font-size:52px;background:#0d0d10}
+#pop .pts{width:150px;display:flex;align-items:center;justify-content:center;font-size:66px;background:#E31B23}
+
+/* result lower third */
+#resBox{left:880px;bottom:56px;width:980px;height:262px}
+#res{display:flex;color:#fff;background:#0d0d10}
+#res .tag{width:220px;background:#E31B23;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+#res .tag .k{font-size:28px;letter-spacing:.12em}
+#res .tag .tp{font-size:96px;line-height:1}
+#res .tag .tl{font-size:22px;letter-spacing:.14em}
+#res .main{flex:1;padding:24px 34px;display:flex;flex-direction:column;justify-content:center}
+#res .ty{font-size:40px;color:#ff4a51}
+#res .wn{font-size:72px;line-height:1.05;white-space:nowrap;overflow:hidden}
+#res .sub{font-size:30px;color:#c9c9d0;margin-top:6px}
+
+/* center cards */
+#cardBox{left:360px;top:110px;width:1200px;height:860px}
+.card{background:#0d0d10;color:#fff;bottom:auto}
+.card .hd{height:84px;background:#E31B23;display:flex;align-items:center;justify-content:space-between;padding:0 34px;font-size:46px}
+.card .hd small{font-size:28px;letter-spacing:.14em}
+#next .vs{display:flex;height:300px}
+#next .vs > div{flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 40px}
+#next .vs .t{font-size:34px;letter-spacing:.1em}
+#next .vs .n{font-size:84px;line-height:1.05}
+#next .vs .mid{flex:0 0 120px;align-items:center;font-size:64px;background:#17171c}
+#dual table{width:100%;border-collapse:collapse}
+#dual td{height:40px;font-size:28px;padding:0 18px;border-bottom:3px solid #0d0d10;background:#17171c}
+#dual td.w{background:#24242b}
+#dual td.wt{width:110px;background:#0d0d10;color:#ff4a51}
+#dual td.tp{width:110px;text-align:center}
+#dual .tot{display:flex;height:84px;align-items:center;justify-content:center;gap:40px;font-size:56px;background:#24242b}
+
+#dbg{position:absolute;left:8px;top:8px;background:#000;color:#7CFC9A;font:14px Menlo,monospace;padding:6px 10px;white-space:pre;z-index:9}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="clipbox" id="popBox"><div class="slide" id="pop"><div class="side"></div><div class="txt H"></div><div class="pts H"></div></div></div>
+  <div class="clipbox" id="bugBox"><div class="slide" id="bug">
+    <div class="hdr H"><div class="wt" id="bWt">106 LBS</div><div class="per" id="bPer">P1</div><div class="clk" id="bClk">2:00</div></div>
+    <div class="rowW" id="rowH"><div class="band"></div><div class="tm H"></div><div class="nm H"></div><div class="pt H"></div></div>
+    <div class="rowW" id="rowA"><div class="band"></div><div class="tm H"></div><div class="nm H"></div><div class="pt H"></div></div>
+    <div class="ftr H"><span class="lab">DUAL</span><span class="ts" id="fH"></span><span class="ts" id="fA"></span></div>
+  </div></div>
+  <div class="clipbox" id="resBox"><div class="slide" id="res">
+    <div class="tag H"><div class="k">RESULT</div><div class="tp" id="rTp">+6</div><div class="tl">TEAM PTS</div></div>
+    <div class="main"><div class="ty H" id="rTy"></div><div class="wn H" id="rWn"></div><div class="sub H" id="rSub"></div></div>
+  </div></div>
+  <div class="clipbox" id="cardBox">
+    <div class="slide card" id="next"><div class="hd H"><span>Up next</span><small id="nWt"></small></div>
+      <div class="vs H"><div id="nH"><div class="t"></div><div class="n"></div></div><div class="mid">VS</div><div id="nA" style="text-align:right"><div class="t"></div><div class="n"></div></div></div></div>
+    <div class="slide card" id="dual"><div class="hd H"><span>Dual summary</span><small id="dTitle"></small></div><table id="dTbl"></table><div class="tot H" id="dTot"></div></div>
+  </div>
+</div>
+<script type="module">
+import { listen, write } from "/pt/pt-sync.js";
+import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, bandHex, defaultState } from "/pt/wrestle/core.js";
+
+const QS = new URLSearchParams(location.search);
+if (QS.has("bg")) document.body.classList.add("bg");
+const $ = (id) => document.getElementById(id);
+const stage = $("stage");
+const fit = () => { stage.style.transform = `scale(${Math.min(innerWidth / 1920, innerHeight / 1080) || 1})`; };
+addEventListener("resize", fit); fit();
+
+// optional bug position: pos=bl (default) | br | tl | tr
+const pos = QS.get("pos") || "bl";
+if (pos.includes("r")) { $("bugBox").style.left = "auto"; $("bugBox").style.right = "60px"; $("popBox").style.left = "auto"; $("popBox").style.right = "60px"; $("resBox").style.left = "60px"; }
+if (pos.includes("t")) { $("bugBox").style.bottom = "auto"; $("bugBox").style.top = "56px"; $("popBox").style.bottom = "auto"; $("popBox").style.top = "322px"; }
+
+const dbg = QS.has("debug") ? Object.assign(document.body.appendChild(document.createElement("div")), { id: "dbg" }) : null;
+let link = "connecting";
+let S = defaultState(), base = null, popUntil = 0, resUntil = 0, frames = 0;
+const vis = { bug: 0, pop: 0, res: 0, next: 0, dual: 0 };
+
+function esc(s) { return String(s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+function teamOf(side) { return side === "h" ? S.home : S.away; }
+function name(side, n) { const nm = (n || {})[side]; return nm || teamOf(side).name; }
+
+function paintStatic() {
+  const lu = S.lineup[S.weights[S.idx]] || {};
+  $("bWt").textContent = (S.weights[S.idx] || "") + " LBS";
+  for (const s of ["h", "a"]) {
+    const r = $(s === "h" ? "rowH" : "rowA"), t = teamOf(s);
+    r.children[0].style.background = bandHex(S.bands[s]);
+    r.children[1].style.background = t.color; r.children[1].textContent = t.short;
+    r.children[2].textContent = name(s, lu);
+    r.children[3].textContent = S.m[s];
+  }
+  $("fH").innerHTML = `<span class="sq" style="background:${S.home.color}"></span>${esc(S.home.short)} ${S.team.h}`;
+  $("fA").innerHTML = `<span class="sq" style="background:${S.away.color}"></span>${esc(S.away.short)} ${S.team.a}`;
+  // up next = the current bout's lineup (shown between bouts)
+  $("nWt").textContent = (S.weights[S.idx] || "") + " LBS";
+  $("nH").children[0].textContent = S.home.name; $("nH").children[1].textContent = name("h", lu);
+  $("nA").children[0].textContent = S.away.name; $("nA").children[1].textContent = name("a", lu);
+  $("dTitle").textContent = `${S.home.short} vs ${S.away.short}`;
+  const done = {}; S.bouts.forEach((b) => (done[b.wt] = b));
+  $("dTbl").innerHTML = S.weights.map((w) => { const b = done[w], l = S.lineup[w] || {};
+    return `<tr class="H"><td class="wt">${esc(w)}</td><td class="${b && b.w === "h" ? "w" : ""}">${esc(l.h || "—")}</td><td class="${b && b.w === "a" ? "w" : ""}">${esc(l.a || "—")}</td><td>${b ? RESULTS[b.type].label + (b.type === "FALL" ? " " + b.time : b.score ? " " + b.score : "") : ""}</td><td class="tp">${b ? "+" + b.tp + " " + esc(teamOf(b.w).short) : ""}</td></tr>`; }).join("");
+  $("dTot").innerHTML = `<span style="color:${S.home.color}">■</span>${esc(S.home.name)} ${S.team.h} <span style="color:#777">–</span> ${S.team.a} ${esc(S.away.name)}<span style="color:${S.away.color}">■</span>`;
+}
+
+function onState(s) {
+  if (!s) return;
+  const first = base === null;
+  S = s;
+  if (first) { base = { pop: s.pop.n || 0, res: s.res.n || 0 }; }
+  else {
+    if ((s.pop.n || 0) > base.pop) { base.pop = s.pop.n; showPop(s.pop); }
+    if ((s.res.n || 0) > base.res) { base.res = s.res.n; showRes(s.res); }
+  }
+  paintStatic();
+}
+function showPop(p) {
+  const t = teamOf(p.side);
+  $("pop").children[0].style.background = bandHex(S.bands[p.side]);
+  $("pop").children[1].textContent = p.text + " · " + t.short;
+  $("pop").children[2].textContent = p.pts ? "+" + p.pts : "!";
+  $("pop").children[2].style.background = p.pts ? "#E31B23" : "#24242b";
+  vis.pop = 0; popUntil = Date.now() + 3200;
+}
+function showRes(r) {
+  $("rTp").textContent = "+" + r.tp;
+  $("rTy").textContent = RESULTS[r.type].label + (r.type === "FALL" ? " · " + r.time : r.score ? " · " + r.score : "") + " · " + r.wt + " lbs";
+  $("rWn").textContent = (r.w === "h" ? r.hn : r.an) || teamOf(r.w).name;
+  $("rSub").textContent = `${teamOf(r.w).name} · Dual: ${S.home.short} ${S.team.h} – ${S.team.a} ${S.away.short}`;
+  vis.res = 0; resUntil = Date.now() + 8000;
+}
+
+// Script-driven slide-in/out (keeps working in PT's hidden output page).
+function approach(k, target, dt) { const sp = dt / 320; vis[k] = target ? Math.min(1, vis[k] + sp) : Math.max(0, vis[k] - sp); }
+const ease = (x) => 1 - Math.pow(1 - x, 3);
+let last = performance.now();
+function step() {
+  const now = performance.now(), dt = Math.min(100, now - last); last = now; frames++;
+  const card = S.show.next || S.show.dual;
+  approach("bug", S.show.bug && !card, dt);
+  approach("pop", Date.now() < popUntil && S.show.bug && !card, dt);
+  approach("res", Date.now() < resUntil && !card, dt);
+  approach("next", S.show.next, dt);
+  approach("dual", S.show.dual, dt);
+  const fromBottom = !pos.includes("t");
+  $("bug").style.transform = `translateY(${(1 - ease(vis.bug)) * (fromBottom ? 270 : -270)}px)`;
+  $("pop").style.transform = `translateY(${(1 - ease(vis.pop)) * (fromBottom ? 100 : -100)}px)`;
+  $("res").style.transform = `translateY(${(1 - ease(vis.res)) * 270}px)`;
+  $("next").style.transform = `translateY(${(1 - ease(vis.next)) * 880}px)`;
+  $("dual").style.transform = `translateY(${(1 - ease(vis.dual)) * 880}px)`;
+  $("next").style.visibility = vis.next > 0 ? "visible" : "hidden";
+  $("dual").style.visibility = vis.dual > 0 ? "visible" : "hidden";
+  $("bPer").textContent = periodById(S.m.period).label;
+  $("bClk").textContent = fmtClock(remaining(S.m));
+  if (dbg) dbg.textContent = `wrestle overlay · ${link} · v${S.v} · frames ${frames} · page ${document.visibilityState}`;
+}
+(function raf() { step(); requestAnimationFrame(raf); })();
+setInterval(step, 33);
+
+if (QS.has("demo")) {
+  // ?demo=1 renders sample data locally (no connection), for previews.
+  const d = defaultState();
+  d.home = { name: "Ozark", short: "OZK", color: "#E31B23" }; d.away = { name: "Nixa", short: "NIX", color: "#1F4FA0" };
+  d.lineup["144"] = { h: "Jake Miller", a: "Tyler Brooks" }; d.idx = d.weights.indexOf("144");
+  d.team = { h: 18, a: 12 }; d.m.h = 7; d.m.a = 3; d.m.period = "2"; d.m.clockMs = 83000; d.v = 1;
+  d.bouts = [{ wt: "106", w: "h", type: "FALL", tp: 6, time: "1:42", hn: "", an: "" }];
+  onState(d);
+} else {
+  listen(DOC, (d) => onState(unpack(d)), (st) => { link = st; });
+  const beat = () => write("wrestle-status", { alive: Date.now(), v: S.v }).catch(() => {});
+  setTimeout(beat, 1500); setInterval(beat, 5000);
+}
+</script>
+</body>
+</html>
