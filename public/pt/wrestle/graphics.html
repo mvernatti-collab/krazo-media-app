@@ -37,6 +37,9 @@ input{width:100%}
 .spi{display:flex;align-items:center;gap:8px;background:#fff;color:#000;padding:6px 8px;border-radius:8px}
 .spi img{height:40px;max-width:120px;object-fit:contain}
 .spi button{background:#eee;color:#000;border-color:#ccc;padding:4px 8px}
+.sl{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;margin-top:12px}
+.sl label{color:var(--mute);font-size:14px}.sl b{color:#fff}
+.sl input{padding:0;accent-color:#ED1C24}
 .pv{position:relative;width:100%;aspect-ratio:16/9;background:#3d5a2e;border-radius:10px;overflow:hidden}
 .pv iframe{position:absolute;left:0;top:0;width:1920px;height:1080px;border:0;transform-origin:0 0}
 @media (max-width:820px){main{grid-template-columns:1fr}}
@@ -84,6 +87,19 @@ input{width:100%}
   </div>
 
   <div class="card full">
+    <div class="row"><div class="lbl" style="margin:0">Scorebug position &amp; size</div><div class="sp"></div><button id="layReset">Reset</button></div>
+    <div style="color:var(--mute);font-size:13px;margin:6px 0 10px">Leave the HTML layer full screen in Production Truck and size it here. The pop-ups and stingers move with the bug, and the result graphics sit beside it.</div>
+    <div class="row">
+      <span style="color:var(--mute);font-size:13px">Corner</span>
+      <button data-corner="tl">↖ Top left</button><button data-corner="tr">↗ Top right</button>
+      <button data-corner="bl">↙ Bottom left</button><button data-corner="br">↘ Bottom right</button>
+    </div>
+    <div class="sl"><label>Size <b id="vScale">100%</b></label><input type="range" id="lScale" min="50" max="160" step="5" value="100"></div>
+    <div class="sl"><label>Left / right <b id="vX">0</b></label><input type="range" id="lX" min="-400" max="400" step="5" value="0"></div>
+    <div class="sl"><label>Up / down <b id="vY">0</b></label><input type="range" id="lY" min="-300" max="300" step="5" value="0"></div>
+  </div>
+
+  <div class="card full">
     <div class="row"><div class="lbl" style="margin:0">Sponsors</div><div class="sp"></div><button id="gSpon">Sponsor bug: off</button></div>
     <div style="color:var(--mute);font-size:13px;margin:6px 0 10px">Top-right corner, rotates every 8 seconds. Logos look best on white. They hide during the opening and final cards.</div>
     <div class="row"><input id="spName" placeholder="Sponsor name" style="width:auto;flex:1"><input id="spFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="width:auto"><button id="spAdd" class="live">Add sponsor</button></div>
@@ -97,7 +113,8 @@ input{width:100%}
 </main>
 <script type="module">
 import { write, listen, read } from "/pt/pt-sync.js";
-import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, pack, defaultState } from "/pt/wrestle/core.js";
+import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, pack, defaultState, makeSkew } from "/pt/wrestle/core.js";
+const SK = makeSkew();
 import { GFX, blankGfx, loadDuals, buildStats, recOf, toggleCard, dualRecord, shrinkImage } from "/pt/wrestle/records.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -158,7 +175,7 @@ function paint() {
   $("ltShow").textContent = G.show.lt ? "Update" : "Show";
   $("ltHide").classList.toggle("live", false);
   const n = lu(), m = S.m;
-  $("now").innerHTML = `${esc(wt())} lbs · ${esc(n.h || S.home.short)} ${m.h} – ${m.a} ${esc(n.a || S.away.short)} · ${periodById(m.period).label} ${fmtClock(remaining(m))}
+  $("now").innerHTML = `${esc(wt())} lbs · ${esc(n.h || S.home.short)} ${m.h} – ${m.a} ${esc(n.a || S.away.short)} · ${periodById(m.period).label} ${fmtClock(remaining(m, SK.now()))}
     <small>Dual: ${esc(S.home.name)} ${S.team.h} – ${S.team.a} ${esc(S.away.name)} · bout ${S.idx + 1} of ${S.weights.length}</small>`;
   // one-tap lower thirds built from live data
   const items = [];
@@ -170,19 +187,35 @@ function paint() {
 }
 setInterval(() => { if (S.m.running) paint(); }, 500);
 
+// scorebug layout
+function paintLayout() {
+  const L0 = G.layout || {};
+  document.querySelectorAll("[data-corner]").forEach((b) => b.classList.toggle("live", (L0.pos || "bl") === b.dataset.corner));
+  if (document.activeElement && document.activeElement.type === "range") return; // don't fight the slider being dragged
+  $("lScale").value = Math.round((+L0.scale || 1) * 100); $("lX").value = +L0.x || 0; $("lY").value = +L0.y || 0;
+  $("vScale").textContent = $("lScale").value + "%"; $("vX").textContent = $("lX").value; $("vY").textContent = $("lY").value;
+}
+let layT = 0;
+function sendLayout() { clearTimeout(layT); layT = setTimeout(send, 120); }
+document.querySelectorAll("[data-corner]").forEach((b) => (b.onclick = () => { G.layout = { ...G.layout, pos: b.dataset.corner, x: 0, y: 0 }; paintLayout(); send(); }));
+for (const [id, k, f] of [["lScale", "scale", (v) => v / 100], ["lX", "x", (v) => v], ["lY", "y", (v) => v]]) {
+  $(id).oninput = () => { G.layout = { ...G.layout, [k]: f(+$(id).value) }; $("vScale").textContent = $("lScale").value + "%"; $("vX").textContent = $("lX").value; $("vY").textContent = $("lY").value; sendLayout(); };
+}
+$("layReset").onclick = () => { G.layout = { pos: "bl", scale: 1, x: 0, y: 0 }; paintLayout(); send(); };
+
 // preview scaling
 const fit = () => { const w = $("pv").clientWidth; $("pvf").style.transform = `scale(${w / 1920})`; };
 addEventListener("resize", fit); fit();
 
-listen(DOC, (d) => { const s = unpack(d); if (s) { S = s; paint(); } }, (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live link" : st === "polling" ? "Backup link" : "No connection"; });
-listen(GFX, (d) => { const g = unpack(d); if (!g) return; const b = blankGfx(); G = { ...b, ...g, show: { ...b.show, ...(g.show || {}) }, lt: { ...b.lt, ...(g.lt || {}) }, open: { ...b.open, ...(g.open || {}) } }; paint(); }, () => {}, 2000);
+listen(DOC, (d) => { if (d) SK.see(d.sent); const s = unpack(d); if (s && (s.v || 0) >= (S.v || 0)) { S = s; paint(); } }, (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live link" : st === "polling" ? "Backup link" : "No connection"; }, 1000, { backup: true });
+listen(GFX, (d) => { const g = unpack(d); if (!g || (G.v && g.v && g.v < G.v)) return; const b = blankGfx(); G = { ...b, ...g, show: { ...b.show, ...(g.show || {}) }, lt: { ...b.lt, ...(g.lt || {}) }, open: { ...b.open, ...(g.open || {}) }, layout: { ...b.layout, ...(g.layout || {}) } }; paint(); paintLayout(); }, () => {}, 2000);
 let lastBeat = 0, prevAlive;
 listen("wrestle-status", (d) => { if (!d) return; if (prevAlive !== undefined && d.alive !== prevAlive) lastBeat = performance.now(); prevAlive = d.alive; }, () => {}, 3000);
 setInterval(() => { const ok = lastBeat && performance.now() - lastBeat < 15000; const p = $("pOver"); p.className = "pill " + (ok ? "ok" : "bad"); p.textContent = ok ? "Overlay online" : "Overlay offline"; }, 1000);
 let FULL = [];
 const refresh = async () => { FULL = await loadDuals().catch(() => []); STATS = buildStats(FULL); paint(); };
 refresh(); setInterval(refresh, 60000);
-paintPresets(); paint();
+paintPresets(); paint(); paintLayout();
 </script>
 </body>
 </html>
