@@ -467,7 +467,7 @@ function render() {
   const h = hints(); $("hint").innerHTML = h; $("hint").classList.toggle("on", !!h);
   const d = derive(S.m.ev);
   $("log").innerHTML = d.list.map((e, i) => {
-    const side = e.k === "POS" ? (e.s === "N" ? null : e.s) : ["STALL", "PEN", "CAUT"].includes(e.k) ? e.s : e.to;
+    const side = e.k === "POS" ? (e.ch || (e.s === "N" ? null : e.s)) : ["STALL", "PEN", "CAUT"].includes(e.k) ? e.s : e.to;
     const who = side ? team(side).short : "";
     let row = `<div class="e ${i === selEv ? "sel" : ""}" data-sel="${i}"><span style="color:var(--mute)">${periodById(e.p).label}</span><span style="color:var(--mute)">${fmtClock(e.c ?? 0)}</span><span><b style="color:${side ? bandHex(S.bands[side]) : "#aaa"}">${esc(who)}</b> ${esc(e.txt)}</span><span class="H" style="text-align:right">${e.h}–${e.a}</span></div>`;
     if (i === selEv) {
@@ -515,23 +515,51 @@ document.addEventListener("click", (e) => {
 });
 
 // ---------- clock & periods ----------
+// ---- Choice of position (NFHS) ----
+// P2: the disk winner picks neutral / top / bottom / defer; defer hands the pick to the
+// opponent. P3: whoever didn't choose in P2. SV: neutral. TB1 + UTB: whoever scored the
+// first points in regulation (disk if nobody did). TB2: the other wrestler.
+const PICK = { N: ["Neutral", "both standing"], top: ["Top", "chooser starts on top"], bot: ["Bottom", "chooser starts on bottom"], defer: ["Defer", "opponent picks now; you choose next period"] };
+function firstScorer() { const f = derive(S.m.ev).list.find((e) => ["1", "2", "3"].includes(e.p) && e.pts > 0); return f ? f.to : null; }
+function periodName(id) { return /^\d$/.test(id) ? "period " + id : periodById(id).label === "SV" ? "sudden victory" : { TB1: "the first tiebreaker", TB2: "the second tiebreaker", UTB: "the ultimate tiebreaker" }[id]; }
+function modal(title, sub, buttons, onPick, foot = "") {
+  $("choiceT").textContent = title; $("choice").querySelector(".box > div:nth-child(2)").textContent = sub;
+  $("choiceO").innerHTML = buttons.map(([v, l, d]) => `<button data-choose="${v}">${l}${d ? `<span style="display:block;font-size:12px;font-weight:400;color:var(--mute);margin-top:2px">${d}</span>` : ""}</button>`).join("") + foot;
+  $("choice").classList.add("on");
+  $("choiceO").onclick = (e) => { const c = e.target.closest("[data-choose]"); if (c) onPick(c.dataset.choose); };
+}
+const closeModal = () => $("choice").classList.remove("on");
+function chooseWho(id, opts, why) {
+  modal(`Start of ${periodName(id)}`, why || "Whose choice?", [["h", esc(nm("h")), esc(S.home.name)], ["a", esc(nm("a")), esc(S.away.name)]], (s) => choosePos(id, s, opts));
+}
+function choosePos(id, side, opts, deferredBy = null, why = "") {
+  const sub = deferredBy ? `${nm(deferredBy)} deferred, so ${nm(side)} picks for ${periodName(id)}.` : `${nm(side)}'s choice${why ? " (" + why + ")" : ""}.`;
+  modal(`Start of ${periodName(id)}`, sub, opts.map((o) => [o, PICK[o][0], o === "defer" ? PICK[o][1] : o === "N" ? "" : (o === "top" ? nm(side) + " on top" : nm(side) + " on bottom")]), (pick) => {
+    if (pick === "defer") return choosePos(id, other(side), opts.filter((o) => o !== "defer"), side);
+    closeModal();
+    const pos = pick === "N" ? "N" : pick === "top" ? side : other(side);
+    setPeriod(id, pos, { ch: side, pick, def: !!deferredBy });
+  }, deferredBy ? "" : `<button data-switch="1" class="ghost" style="font-size:13px;padding:8px">Wrong wrestler? Give the choice to ${esc(nm(other(side)))}</button>`);
+  $("choiceO").querySelector("[data-switch]")?.addEventListener("click", (e) => { e.stopPropagation(); choosePos(id, other(side), opts, null, "switched"); });
+}
 function askPeriod(id) {
   if (id === "1" || id === "SV") return setPeriod(id, "N");
-  $("choiceT").textContent = "Start of " + (periodById(id).label.startsWith("P") ? "period " + id : periodById(id).label);
-  $("choiceO").innerHTML = `<button data-choose="N">Neutral</button>
-    <button data-choose="h">${esc(nm("h"))} top <span style="color:var(--mute)">(${esc(S.home.short)})</span></button>
-    <button data-choose="a">${esc(nm("a"))} top <span style="color:var(--mute)">(${esc(S.away.short)})</span></button>`;
-  $("choice").classList.add("on");
-  $("choiceO").onclick = (e) => { const c = e.target.closest("[data-choose]"); if (!c) return; $("choice").classList.remove("on"); setPeriod(id, c.dataset.choose); };
+  const ch = S.m.ch || {};
+  if (id === "2") return chooseWho(id, ["N", "top", "bot", "defer"], "Who won the disk? They get the choice.");
+  if (id === "3") return ch.p2 ? choosePos(id, other(ch.p2), ["N", "top", "bot"], null, ch.p2def ? "deferred in period 2" : "didn't choose in period 2") : chooseWho(id, ["N", "top", "bot"]);
+  if (id === "TB1" || id === "UTB") { const f = firstScorer(), o = id === "TB1" ? ["top", "bot", "defer"] : ["top", "bot"];
+    return f ? choosePos(id, f, o, null, "scored first") : chooseWho(id, o, "No points in regulation, so the disk decides. Whose choice?"); }
+  if (id === "TB2") return ch.tb1 ? choosePos(id, other(ch.tb1), ["top", "bot"], null, "didn't choose in the first tiebreaker") : chooseWho(id, ["top", "bot"]);
 }
 $("choiceX").onclick = () => $("choice").classList.remove("on");
-function setPeriod(id, pos) {
+function setPeriod(id, pos, meta = null) {
   periodDone = false;
   change(() => {
     const cur = periodById(S.m.period), curIdx = PERIODS.indexOf(cur), newIdx = PERIODS.findIndex((p) => p.id === id);
     if (newIdx > curIdx && curIdx < 3) S.m.elapsedBefore += cur.ms - remaining(S.m);
     S.m.period = id; S.m.clockMs = periodById(id).ms; S.m.running = false; S.m.at = Date.now();
-    S.m.ev.push({ k: "POS", s: pos, p: id, c: S.m.clockMs });
+    S.m.ev.push({ k: "POS", s: pos, p: id, c: S.m.clockMs, ...(meta || {}) });
+    if (meta) { S.m.ch = S.m.ch || {}; if (id === "2") { S.m.ch.p2 = meta.ch; S.m.ch.p2def = meta.def; } if (id === "TB1") S.m.ch.tb1 = meta.ch; }
   });
 }
 $("startStop").onclick = () => change(() => {
