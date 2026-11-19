@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Announcer View · Krazo Media Wrestling</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<style>
+:root{--red:#E31B23;--bg:#0c0c0f;--card:#17171c;--line:#2b2b32;--mute:#9a9aa3;--g:#16A34A;--r:#DC2626}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif}
+.H{font-family:Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-weight:400}
+header{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header img{height:30px}
+.dual{font-size:44px;line-height:1}
+.dual i{display:inline-block;width:14px;height:34px;vertical-align:-4px;margin:0 8px}
+.math{color:#ffd27a;font-size:16px;font-weight:700}
+.sp{flex:1}
+.pill{font:700 11px -apple-system,Arial;letter-spacing:.06em;text-transform:uppercase;padding:5px 9px;border-radius:999px;background:#222229;color:#bbb}
+.pill.ok{background:#12351f;color:#7ee2a0}.pill.warn{background:#3a2e10;color:#ffd27a}.pill.bad{background:#3a1414;color:#ff9a9a}
+main{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.lbl{font:700 12px -apple-system,Arial;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin:0 0 10px}
+.bout{display:grid;grid-template-columns:1fr 190px 1fr;gap:12px;align-items:stretch}
+.w{border-radius:12px;border:3px solid var(--line);padding:12px;position:relative}
+.w.h{border-color:var(--g)}.w.a{border-color:var(--r)}
+.w .nm{font-size:34px;line-height:1.05}
+.w .tm{color:var(--mute);font-size:14px;margin-top:2px}
+.w .rec{font-size:26px;color:#ff6a70;margin-top:8px}
+.w .facts{font-size:14px;color:#d6d6dc;margin-top:6px;line-height:1.5}
+.w .sc{font-size:92px;line-height:1;margin-top:10px}
+.w .role{position:absolute;right:10px;top:10px;font:800 12px -apple-system,Arial;letter-spacing:.12em;padding:5px 9px;border-radius:6px;background:#2a2a31;color:#ccc}
+.w .role.top{background:#fff;color:#000}.w .role.bot{background:#3a2e10;color:#ffd27a}
+.w .pen{font-size:13px;color:#ffd27a;margin-top:8px}
+.c{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:#111116;border-radius:12px}
+.c .wt{font-size:40px}.c .clk{font-size:62px;line-height:1;font-variant-numeric:tabular-nums}.c .clk.run{color:#7ee2a0}
+.c .per{font-size:22px;color:var(--mute)}
+.log{font-size:16px;margin-top:12px}
+.log div{display:grid;grid-template-columns:40px 56px 1fr 60px;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)}
+.log div:first-child{background:#20202a;font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:15px}
+td{padding:7px 6px;border-bottom:1px solid var(--line)}
+td.wt{color:#ff6a70;font-family:Anton,Impact,sans-serif;font-size:18px;width:52px}
+td.win{color:#7ee2a0;font-weight:700}
+td.r{color:var(--mute);font-size:13px}
+tr.cur td{background:#20202a}
+.up{display:grid;gap:8px}
+.up div{display:grid;grid-template-columns:52px 1fr 1fr;gap:8px;align-items:center;padding:8px;border-radius:10px;background:#111116}
+.up b{font-family:Anton,Impact,sans-serif;font-weight:400;font-size:20px;color:#ff6a70}
+.up span small{display:block;color:var(--mute);font-size:12px}
+@media (max-width:1000px){main{grid-template-columns:1fr}.bout{grid-template-columns:1fr 1fr}.c{grid-column:1/-1;order:-1;padding:10px}}
+</style>
+</head>
+<body>
+<header>
+  <img src="/pt/krazo.png" alt="Krazo Media">
+  <div class="dual H" id="dual"></div>
+  <div class="math" id="math"></div>
+  <div class="sp"></div>
+  <div class="pill" id="pLink">Connecting</div>
+</header>
+<main>
+  <div>
+    <div class="card">
+      <div class="lbl" id="boutLbl">Now wrestling</div>
+      <div class="bout">
+        <div class="w h" id="wH"></div>
+        <div class="c"><div class="wt H" id="cWt"></div><div class="clk H" id="cClk"></div><div class="per H" id="cPer"></div></div>
+        <div class="w a" id="wA"></div>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+  <div>
+    <div class="card" style="margin-bottom:14px"><div class="lbl">On deck</div><div class="up" id="up"></div></div>
+    <div class="card"><div class="lbl">Results tonight</div><table id="res"></table></div>
+  </div>
+</main>
+<script type="module">
+import { listen } from "/pt/pt-sync.js";
+import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, defaultState, derive, bandHex } from "/pt/wrestle/core.js";
+import { loadDuals, buildStats, rkey } from "/pt/wrestle/records.js";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let S = defaultState(), STATS = new Map();
+const team = (s) => (s === "h" ? S.home : S.away);
+const st = (s, name) => name ? STATS.get(rkey(team(s).name, name)) : null;
+const resTxt = (b) => RESULTS[b.type].label + (b.type === "FALL" ? " " + b.time : b.score ? " " + b.score : "");
+
+function facts(x) {
+  if (!x) return "No saved matches yet";
+  const bits = [];
+  if (x.FALL) bits.push(`${x.FALL} pin${x.FALL > 1 ? "s" : ""}`);
+  if (x.TF) bits.push(`${x.TF} tech fall${x.TF > 1 ? "s" : ""}`);
+  if (x.MD) bits.push(`${x.MD} major${x.MD > 1 ? "s" : ""}`);
+  bits.push(`${x.TD} takedowns`);
+  if (x.NF) bits.push(`${x.NF} near falls`);
+  const last = x.m[x.m.length - 1];
+  return bits.join(" · ") + (last ? `<br>Last: ${last.won ? "W" : "L"} ${esc(RESULTS[last.type].label)}${last.type === "FALL" ? " " + esc(last.time) : last.score ? " " + esc(last.score) : ""} vs ${esc(last.opp)} (${esc(last.oppTeam)})` : "");
+}
+function wHtml(s) {
+  const lu = S.lineup[S.weights[S.idx]] || {}, name = lu[s], x = st(s, name), pos = S.m.pos || "N", p = (S.m.pen || {})[s] || {};
+  const role = pos === "N" ? ["NEUTRAL", ""] : pos === s ? ["TOP", "top"] : ["BOTTOM", "bot"];
+  const pens = [p.stall ? `${p.stall} stall${p.stall > 1 ? "s" : ""}` : "", p.pen ? `${p.pen} penalt${p.pen > 1 ? "ies" : "y"}` : "", p.caut ? `${p.caut} caution${p.caut > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
+  return `<div class="role ${role[1]}">${role[0]}</div><div class="nm H">${esc(name || "Open")}</div>
+    <div class="tm"><span style="color:${bandHex(S.bands[s])}">■</span> ${esc(team(s).name)} · ${S.bands[s]}</div>
+    <div class="rec H">${x ? x.rec : "—"}</div><div class="facts">${facts(x)}</div>
+    <div class="sc H">${S.m[s]}</div><div class="pen">${pens}</div>`;
+}
+function paint() {
+  const W = S.weights, cur = W[S.idx], done = {}; S.bouts.forEach((b) => (done[b.wt] = b));
+  $("dual").innerHTML = `<span style="color:${S.home.color}">■</span> ${esc(S.home.name)} ${S.team.h} <span style="color:#666">–</span> ${S.team.a} ${esc(S.away.name)} <span style="color:${S.away.color}">■</span>`;
+  // dual math
+  const left = W.filter((w) => !done[w]).length, max = left * 6, lead = S.team.h - S.team.a, ahead = lead > 0 ? S.home.name : S.away.name;
+  $("math").textContent = !left ? "Dual complete" : Math.abs(lead) > max ? `${ahead} has clinched the dual` :
+    `${left} bout${left > 1 ? "s" : ""} left · ${max} points still possible` + (lead ? ` · ${ahead} leads by ${Math.abs(lead)}` : " · tied");
+  $("boutLbl").textContent = `Now wrestling · bout ${S.idx + 1} of ${W.length}` + (done[cur] ? ` · final: ${resTxt(done[cur])}` : "");
+  $("wH").innerHTML = wHtml("h"); $("wA").innerHTML = wHtml("a");
+  $("cWt").textContent = cur + " lbs";
+  $("cPer").textContent = periodById(S.m.period).label;
+  const d = derive(S.m.ev || []);
+  $("log").innerHTML = d.list.filter((e) => e.k !== "POS" || e.s !== "N" || e.p !== "1").slice(-8).reverse().map((e) => {
+    const side = e.k === "POS" ? (e.s === "N" ? null : e.s) : ["STALL", "PEN", "CAUT"].includes(e.k) ? e.s : e.to;
+    const lu = S.lineup[cur] || {}, who = side ? (lu[side] || team(side).short) : "";
+    return `<div><span style="color:var(--mute)">${periodById(e.p).label}</span><span style="color:var(--mute)">${fmtClock(e.c ?? 0)}</span><span>${side ? `<b style="color:${bandHex(S.bands[side])}">${esc(who)}</b> ` : ""}${esc(e.k === "POS" ? (e.s === "N" ? "Neutral restart" : "starts on top") : e.txt)}</span><span class="H">${e.h}–${e.a}</span></div>`;
+  }).join("") || '<div style="color:#777;display:block;background:none;font-weight:400">No scoring yet</div>';
+  // on deck: next two weights
+  const nx = [1, 2].map((k) => W[(S.idx + k) % W.length]).filter((w, i, a) => w !== cur && a.indexOf(w) === i && !done[w]);
+  $("up").innerHTML = nx.map((w) => { const l = S.lineup[w] || {}; const xh = st("h", l.h), xa = st("a", l.a);
+    return `<div><b>${esc(w)}</b><span>${esc(l.h || "Open")}<small>${esc(S.home.short)}${xh ? " · " + xh.rec : ""}</small></span><span>${esc(l.a || "Open")}<small>${esc(S.away.short)}${xa ? " · " + xa.rec : ""}</small></span></div>`; }).join("") || '<div style="display:block;color:#777">Last bout of the dual</div>';
+  $("res").innerHTML = W.map((w) => { const b = done[w], l = S.lineup[w] || {};
+    return `<tr class="${w === cur ? "cur" : ""}"><td class="wt">${esc(w)}</td><td class="${b && b.w === "h" ? "win" : ""}">${esc(l.h || "Open")}</td><td class="${b && b.w === "a" ? "win" : ""}">${esc(l.a || "Open")}</td><td class="r">${b ? esc(resTxt(b)) + " · +" + b.tp + " " + esc(team(b.w).short) : ""}</td></tr>`; }).join("");
+  tick();
+}
+function tick() { $("cClk").textContent = fmtClock(remaining(S.m)); $("cClk").classList.toggle("run", !!S.m.running); }
+setInterval(tick, 100);
+listen(DOC, (d) => { const s = unpack(d); if (s) { S = s; paint(); } }, (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live" : st === "polling" ? "Backup link" : "No connection"; });
+const refresh = async () => { STATS = buildStats(await loadDuals().catch(() => [])); paint(); };
+refresh(); setInterval(refresh, 45000);
+paint();
+</script>
+</body>
+</html>

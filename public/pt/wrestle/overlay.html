@@ -44,6 +44,13 @@ body.bg{background:#3d5a2e}
 
 /* result lower third */
 #resBox{left:880px;bottom:56px;width:980px;height:262px}
+#ltBox{left:880px;bottom:56px;width:980px;height:150px}
+#lt{display:flex;background:#0d0d10;color:#fff}
+#lt .bar{width:22px;background:#E31B23}
+#lt .tx{flex:1;padding:16px 30px;display:flex;flex-direction:column;justify-content:center}
+#lt .t1{font-size:60px;line-height:1.05;white-space:nowrap;overflow:hidden}
+#lt .t2{font-size:30px;color:#c9c9d0;margin-top:4px;white-space:nowrap;overflow:hidden}
+#next .vs .r{font-size:34px;color:#ff4a51;margin-top:6px}
 #res{display:flex;color:#fff;background:#0d0d10}
 #res .tag{width:220px;background:#E31B23;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
 #res .tag .k{font-size:28px;letter-spacing:.12em}
@@ -83,18 +90,20 @@ body.bg{background:#3d5a2e}
     <div class="rowW" id="rowA"><div class="band"></div><div class="tm H"></div><div class="nm H"></div><div class="pt H"></div></div>
     <div class="ftr H"><span class="lab">DUAL</span><span class="ts" id="fH"></span><span class="ts" id="fA"></span></div>
   </div></div>
+  <div class="clipbox" id="ltBox"><div class="slide" id="lt"><div class="bar"></div><div class="tx"><div class="t1 H" id="lt1"></div><div class="t2 H" id="lt2"></div></div></div></div>
   <div class="clipbox" id="resBox"><div class="slide" id="res">
     <div class="tag H"><div class="k">RESULT</div><div class="tp" id="rTp">+6</div><div class="tl">TEAM PTS</div></div>
     <div class="main"><div class="ty H" id="rTy"></div><div class="wn H" id="rWn"></div><div class="sub H" id="rSub"></div></div>
   </div></div>
   <div class="clipbox" id="cardBox">
     <div class="slide card" id="next"><div class="hd H"><span>Up next</span><small id="nWt"></small></div>
-      <div class="vs H"><div id="nH"><div class="t"></div><div class="n"></div></div><div class="mid">VS</div><div id="nA" style="text-align:right"><div class="t"></div><div class="n"></div></div></div></div>
+      <div class="vs H"><div id="nH"><div class="t"></div><div class="n"></div><div class="r"></div></div><div class="mid">VS</div><div id="nA" style="text-align:right"><div class="t"></div><div class="n"></div><div class="r"></div></div></div></div>
     <div class="slide card" id="dual"><div class="hd H"><span>Dual summary</span><small id="dTitle"></small></div><table id="dTbl"></table><div class="tot H" id="dTot"></div></div>
   </div>
 </div>
 <script type="module">
 import { listen, write } from "/pt/pt-sync.js";
+import { GFX, blankGfx } from "/pt/wrestle/records.js";
 import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, bandHex, defaultState } from "/pt/wrestle/core.js";
 
 const QS = new URLSearchParams(location.search);
@@ -112,7 +121,8 @@ if (pos.includes("t")) { $("bugBox").style.bottom = "auto"; $("bugBox").style.to
 const dbg = QS.has("debug") ? Object.assign(document.body.appendChild(document.createElement("div")), { id: "dbg" }) : null;
 let link = "connecting";
 let S = defaultState(), base = null, popUntil = 0, resUntil = 0, frames = 0;
-const vis = { bug: 0, pop: 0, res: 0, next: 0, dual: 0 };
+const vis = { bug: 0, pop: 0, res: 0, next: 0, dual: 0, lt: 0 };
+let G = blankGfx();
 
 function esc(s) { return String(s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 function teamOf(side) { return side === "h" ? S.home : S.away; }
@@ -134,6 +144,9 @@ function paintStatic() {
   $("nWt").textContent = (S.weights[S.idx] || "") + " LBS";
   $("nH").children[0].textContent = S.home.name; $("nH").children[1].textContent = name("h", lu);
   $("nA").children[0].textContent = S.away.name; $("nA").children[1].textContent = name("a", lu);
+  const rc = G.rec && G.rec.wt === S.weights[S.idx] ? G.rec : { h: "", a: "" };
+  $("nH").children[2].textContent = rc.h ? rc.h + " this season" : ""; $("nA").children[2].textContent = rc.a ? rc.a + " this season" : "";
+  $("lt1").textContent = G.lt.title || ""; $("lt2").textContent = G.lt.sub || "";
   $("dTitle").textContent = `${S.home.short} vs ${S.away.short}`;
   const done = {}; S.bouts.forEach((b) => (done[b.wt] = b));
   $("dTbl").innerHTML = S.weights.map((w) => { const b = done[w], l = S.lineup[w] || {};
@@ -174,12 +187,14 @@ const ease = (x) => 1 - Math.pow(1 - x, 3);
 let last = performance.now();
 function step() {
   const now = performance.now(), dt = Math.min(100, now - last); last = now; frames++;
-  const card = S.show.next || S.show.dual;
-  approach("bug", S.show.bug && !card, dt);
-  approach("pop", Date.now() < popUntil && S.show.bug && !card, dt);
+  const sh = G.show, card = sh.next || sh.dual;
+  approach("bug", sh.bug && !card, dt);
+  approach("pop", Date.now() < popUntil && sh.bug && !card, dt);
+  approach("lt", sh.lt && !card && !(Date.now() < resUntil), dt);
   approach("res", Date.now() < resUntil && !card, dt);
-  approach("next", S.show.next, dt);
-  approach("dual", S.show.dual, dt);
+  approach("next", sh.next, dt);
+  approach("dual", sh.dual, dt);
+  $("lt").style.transform = `translateY(${(1 - ease(vis.lt)) * 160}px)`;
   const fromBottom = !pos.includes("t");
   $("bug").style.transform = `translateY(${(1 - ease(vis.bug)) * (fromBottom ? 270 : -270)}px)`;
   $("pop").style.transform = `translateY(${(1 - ease(vis.pop)) * (fromBottom ? 100 : -100)}px)`;
@@ -202,11 +217,13 @@ if (QS.has("demo")) {
   d.lineup["144"] = { h: "Jake Miller", a: "Tyler Brooks" }; d.idx = d.weights.indexOf("144");
   d.team = { h: 18, a: 12 }; d.m.h = 7; d.m.a = 3; d.m.period = "2"; d.m.clockMs = 83000; d.v = 1;
   d.bouts = [{ wt: "106", w: "h", type: "FALL", tp: 6, time: "1:42", hn: "", an: "" }];
+  G.show = { ...G.show, ...d.show }; G.rec = { wt: "144", h: "14-2", a: "11-6" };
   onState(d);
 } else {
   listen(DOC, (d) => onState(unpack(d)), (st) => { link = st; });
+  listen(GFX, (d) => { const g = unpack(d); if (!g) return; const b = blankGfx(); G = { ...b, ...g, show: { ...b.show, ...(g.show || {}) }, lt: { ...b.lt, ...(g.lt || {}) } }; paintStatic(); });
   const beat = () => write("wrestle-status", { alive: Date.now(), v: S.v }).catch(() => {});
-  setTimeout(beat, 1500); setInterval(beat, 5000);
+  if (!QS.has("preview")) { setTimeout(beat, 1500); setInterval(beat, 5000); } // previews never claim to be the PT overlay
 }
 </script>
 </body>

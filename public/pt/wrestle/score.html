@@ -56,7 +56,8 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 .posbar button{padding:7px 10px;font-size:13px}
 .hint{display:none;background:#3a2e10;border:1px solid #6b5420;color:#ffe2a0;border-radius:12px;padding:10px 12px;margin-bottom:12px;gap:10px;align-items:center;flex-wrap:wrap}
 .hint.on{display:flex}
-.acts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.acts{display:grid;grid-template-columns:1fr minmax(280px,1.05fr) 1fr;gap:12px;align-items:start}
+.acts>.card{margin-bottom:0}
 .act{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;align-content:start}
 .act button{padding:18px 6px;font-weight:700;font-size:16px}
 .act button b{display:block;font-family:Anton,Impact,sans-serif;font-weight:400;font-size:30px}
@@ -68,9 +69,15 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 .pen button{font-size:13px;padding:9px 4px;background:#2a2016;border-color:#4a3a20}
 .pen button span{display:block;color:#ffd27a;font-size:11px;margin-top:2px}
 .mini{display:flex;gap:6px;margin-top:6px}.mini button{padding:6px 10px;font-size:12px}
-.log{max-height:260px;overflow:auto;font-size:14px}
-.log div{display:grid;grid-template-columns:44px 56px 1fr 70px 30px;gap:6px;padding:6px 4px;border-bottom:1px solid var(--line);align-items:center}
-.log .x{background:transparent;border:0;color:#888;padding:2px}
+.log{max-height:430px;overflow:auto;font-size:14px}
+.log .e{display:grid;grid-template-columns:30px 44px 1fr 46px;gap:6px;padding:8px 4px;border-bottom:1px solid var(--line);align-items:center;cursor:pointer}
+.log .e:hover{background:#1e1e25}.log .e.sel{background:#262630}
+.log .ed{display:flex;flex-wrap:wrap;gap:5px;padding:8px 4px 10px;border-bottom:1px solid var(--line);background:#1c1c23}
+.log .ed button{padding:6px 8px;font-size:12px}
+.log .ed button.del{background:#3a1414;border-color:#7a2020}
+.kbd{color:var(--mute);font-size:11px;text-align:center;line-height:1.4}
+.kbd b{display:inline-block;background:#2a2a31;border:1px solid #3a3a42;border-radius:4px;padding:0 4px;color:#ddd;font-weight:600}
+.clock{cursor:pointer}
 .res{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .res button{padding:12px 4px;font-weight:700}
 .res button span{display:block;font-size:11px;color:var(--mute);font-weight:400}
@@ -86,6 +93,7 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 .modal .box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;max-width:520px;width:100%}
 .modal .box .opts{display:grid;gap:8px;margin-top:12px}
 .modal .box .opts button{padding:16px;font-size:18px;font-weight:700}
+@media (max-width:980px){.acts{grid-template-columns:1fr 1fr}.acts .logc{grid-column:1/-1;order:3}}
 @media (max-width:820px){.board{grid-template-columns:1fr 1fr}.mid{grid-column:1/-1;order:-1}.wr .sc{font-size:70px}.res{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
@@ -112,6 +120,8 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
       <div class="wt H"><span id="wt">106</span> <small>lbs · bout <span id="boutN">1</span>/<span id="boutT">14</span></small></div>
       <div class="sp"></div>
       <div class="dual H"><span id="dH">OZK</span> <span id="dHs">0</span> – <span id="dAs">0</span> <span id="dA">OPP</span></div>
+      <button id="dedH" class="ghost" style="padding:6px 8px;font-size:12px" title="Team point deduction">−1 team <span id="dedHn"></span></button>
+      <button id="dedA" class="ghost" style="padding:6px 8px;font-size:12px" title="Team point deduction">−1 team <span id="dedAn"></span></button>
     </div>
     <button id="nextW" aria-label="Next weight">▶</button>
   </div>
@@ -123,6 +133,7 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
       <button id="startStop" class="red H" style="font-size:24px;padding:12px 28px;width:100%">Start</button>
       <div class="row"><button id="minus1">−1s</button><button id="plus1">+1s</button></div>
       <div class="per" id="periods"></div>
+      <div class="kbd"><b>Space</b> clock · <b>[</b> <b>]</b> ±1s · <b>⌘Z</b> undo<br>Tap the clock to set the time</div>
     </div>
     <div class="wr a" id="wrA"></div>
   </div>
@@ -138,13 +149,14 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 
   <div class="acts">
     <div class="card"><div class="act h" id="actH"></div><div class="lbl" style="margin-top:12px" id="penHl">Penalties on home</div><div class="pen" id="penH"></div><div class="mini"><button data-adj="h:-1" class="ghost">−1 adjust</button><button data-adj="h:1" class="ghost">+1 adjust</button></div></div>
+    <div class="card logc">
+      <div class="row"><div class="lbl" style="margin:0">Match log</div><div class="sp"></div><button id="undo2" class="ghost" style="padding:5px 9px;font-size:12px">↶ Undo</button></div>
+      <div style="color:var(--mute);font-size:12px;margin:4px 0 6px">Tap an entry to fix it: change the move, switch wrestlers or delete it.</div>
+      <div class="log" id="log"></div>
+    </div>
     <div class="card"><div class="act a" id="actA"></div><div class="lbl" style="margin-top:12px" id="penAl">Penalties on away</div><div class="pen" id="penA"></div><div class="mini"><button data-adj="a:-1" class="ghost">−1 adjust</button><button data-adj="a:1" class="ghost">+1 adjust</button></div></div>
   </div>
-
-  <div class="card">
-    <div class="row"><div class="lbl" style="margin:0">Match log</div><div class="sp"></div><span style="color:var(--mute);font-size:12px">× removes one entry and rescores the match</span></div>
-    <div class="log" id="log"></div>
-  </div>
+  <div style="height:12px"></div>
 
   <div class="card">
     <div class="lbl">End match</div>
@@ -163,6 +175,9 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
       <button id="gNext">Up next card</button>
       <button id="gDual">Dual summary card</button>
       <button id="gClear" class="ghost">Hide cards</button>
+      <div class="sp"></div>
+      <button onclick="window.open('/pt/wrestle/graphics.html','_blank')">Graphics remote ↗</button>
+      <button onclick="window.open('/pt/wrestle/broadcast.html','_blank')">Announcer view ↗</button>
     </div>
   </div>
 </section>
@@ -232,12 +247,16 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 
 <script type="module">
 import { write, listen, read } from "/pt/pt-sync.js";
+import { GFX, blankGfx, loadDuals, buildStats, recOf } from "/pt/wrestle/records.js";
 import { DOC, WEIGHTS, PERIODS, periodById, RESULTS, suggestResult, blankMatch, defaultState, remaining, fmtClock, matchElapsed, fmtElapsed, pack, unpack, other, bandHex, derive, SCORING } from "/pt/wrestle/core.js";
 
 let S = defaultState();
 let TEAMS = {};          // saved teams: key -> {name, short, color, roster:[{wt,name}]}
 let DUALS = [];          // saved duals index
-let loaded = false, winner = null, periodDone = false;
+let loaded = false, winner = null, periodDone = false, selEv = -1;
+let G = blankGfx(), STATS = new Map();
+const refreshStats = async () => { STATS = buildStats(await loadDuals().catch(() => [])); };
+refreshStats(); setInterval(refreshStats, 120000);
 const hist = [];
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -362,16 +381,22 @@ function render() {
   $("log").innerHTML = d.list.map((e, i) => {
     const side = e.k === "POS" ? (e.s === "N" ? null : e.s) : ["STALL", "PEN", "CAUT"].includes(e.k) ? e.s : e.to;
     const who = side ? team(side).short : "";
-    return `<div><span style="color:var(--mute)">${periodById(e.p).label}</span><span style="color:var(--mute)">${fmtClock(e.c ?? 0)}</span><span><b style="color:${side ? bandHex(S.bands[side]) : "#aaa"}">${esc(who)}</b> ${esc(e.txt)}</span><span class="H">${e.h}–${e.a}</span><button class="x" data-del="${i}" aria-label="Remove">×</button></div>`;
-  }).reverse().join("") || '<div style="color:#777;display:block">No actions yet. Start the clock and tap a takedown.</div>';
+    let row = `<div class="e ${i === selEv ? "sel" : ""}" data-sel="${i}"><span style="color:var(--mute)">${periodById(e.p).label}</span><span style="color:var(--mute)">${fmtClock(e.c ?? 0)}</span><span><b style="color:${side ? bandHex(S.bands[side]) : "#aaa"}">${esc(who)}</b> ${esc(e.txt)}</span><span class="H" style="text-align:right">${e.h}–${e.a}</span></div>`;
+    if (i === selEv) {
+      const kinds = e.k === "POS" ? [["N", "Neutral"], ["h", S.home.short + " top"], ["a", S.away.short + " top"]].map(([v, l]) => `<button data-fixpos="${i}:${v}" class="${e.s === v ? "on" : ""}">${esc(l)}</button>`).join("")
+        : [["TD", "TD"], ["E", "Esc"], ["R", "Rev"], ["NF2", "NF2"], ["NF3", "NF3"], ["NF4", "NF4"], ["STALL", "Stall"], ["PEN", "Pen"], ["CAUT", "Caut"]].map(([k, l]) => `<button data-fixk="${i}:${k}" class="${e.k === k ? "on" : ""}">${l}</button>`).join("");
+      row += `<div class="ed">${kinds}${e.k === "POS" || e.k === "ADJ" ? "" : `<button data-fixswap="${i}">⇄ Other wrestler</button>`}<button data-fixclk="${i}">Time</button><button class="del" data-del="${i}">Delete</button></div>`;
+    }
+    return row;
+  }).reverse().join("") || '<div style="color:#777;padding:6px">No actions yet. Start the clock and tap a takedown.</div>';
+  $("dedHn").textContent = S.home.short; $("dedAn").textContent = S.away.short;
   const n = names(), lead = S.m.h > S.m.a ? "h" : S.m.a > S.m.h ? "a" : null;
   const w = winner || lead || "h";
   $("winHn").textContent = n.h || S.home.short; $("winAn").textContent = n.a || S.away.short;
   $("winH").classList.toggle("on", w === "h"); $("winA").classList.toggle("on", w === "a");
   const sg = suggestResult(S.m.h, S.m.a); $("sugg").textContent = sg ? RESULTS[sg].label : "—";
   $("periods").innerHTML = PERIODS.map((p) => `<button data-per="${p.id}" class="${S.m.period === p.id ? "on" : ""}">${p.label}</button>`).join("");
-  $("gBug").textContent = "Scorebug: " + (S.show.bug ? "on" : "off");
-  $("gNext").classList.toggle("on", S.show.next); $("gDual").classList.toggle("on", S.show.dual);
+  paintGfx();
   tick();
 }
 $("results").innerHTML = Object.entries(RESULTS).map(([k, r]) => `<button data-res="${k}">${r.label}<span>+${r.tp} team</span></button>`).join("");
@@ -379,7 +404,7 @@ $("winH").onclick = () => { winner = "h"; render(); };
 $("winA").onclick = () => { winner = "a"; render(); };
 
 document.addEventListener("click", (e) => {
-  const b = e.target.closest("button,[data-rename]"); if (!b) return;
+  const b = e.target.closest("button,[data-rename],[data-sel]"); if (!b) return;
   const D = b.dataset;
   if (D.act) { const [k, s] = D.act.split(":"); if (k === "FALL") endMatch("FALL", s); else addEv(k, s); }
   else if (D.pen) { const [k, s] = D.pen.split(":"); addEv(k, s); }
@@ -388,7 +413,12 @@ document.addEventListener("click", (e) => {
   else if (D.per) askPeriod(D.per);
   else if (D.res) endMatch(D.res, winner || (S.m.h >= S.m.a ? "h" : "a"));
   else if (D.hint) { const [t, s] = D.hint.split(":"); endMatch(t, s); }
-  else if (D.del) { change(() => S.m.ev.splice(+D.del, 1)); }
+  else if (D.sel !== undefined) { selEv = selEv === +D.sel ? -1 : +D.sel; render(); }
+  else if (D.del) { selEv = -1; change(() => S.m.ev.splice(+D.del, 1)); toast("Entry deleted, match rescored"); }
+  else if (D.fixk) { const [i, k] = D.fixk.split(":"); change(() => { S.m.ev[+i].k = k; }); }
+  else if (D.fixswap) { change(() => { const e = S.m.ev[+D.fixswap]; e.s = other(e.s); }); }
+  else if (D.fixpos) { const [i, v] = D.fixpos.split(":"); change(() => { S.m.ev[+i].s = v; }); }
+  else if (D.fixclk) { const e = S.m.ev[+D.fixclk], v = askTime(e.c); if (v !== null) change(() => { e.c = v; }); }
   else if (D.go === "next") goBout(S.idx + 1);
   else if (D.rename) {
     const s = D.rename, v = prompt(`${team(s).name} wrestler at ${wt()}:`, names()[s] || "");
@@ -423,6 +453,27 @@ $("startStop").onclick = () => change(() => {
 });
 const nudge = (d) => change(() => { const m = S.m; m.clockMs = Math.max(0, remaining(m) + d); m.at = Date.now(); });
 $("minus1").onclick = () => nudge(-1000);
+function askTime(ms) {
+  const v = prompt("Clock time (m:ss or seconds):", fmtClock(ms || 0));
+  if (v === null) return null;
+  const m = v.trim().match(/^(\d+):(\d{1,2}(?:\.\d)?)$/) || v.trim().match(/^()(\d+(?:\.\d)?)$/);
+  if (!m) { toast("Use m:ss, like 1:23"); return null; }
+  return Math.round(((+m[1] || 0) * 60 + +m[2]) * 1000);
+}
+$("clock").onclick = () => { const v = askTime(remaining(S.m)); if (v !== null) change(() => { S.m.clockMs = v; S.m.at = Date.now(); if (v > 0) periodDone = false; }); };
+$("undo2").onclick = () => $("undo").click();
+for (const s of ["h", "a"]) $(s === "h" ? "dedH" : "dedA").onclick = () => {
+  if (!confirm(`Deduct 1 team point from ${team(s).name}?`)) return;
+  change(() => { S.team[s] -= 1; S.ded = S.ded || { h: 0, a: 0 }; S.ded[s]++; }); saveDual();
+};
+document.addEventListener("keydown", (e) => {
+  const t = e.target; if (t.matches && t.matches("input,textarea,select")) return;
+  if ($("choice").classList.contains("on")) return;
+  if (e.code === "Space") { e.preventDefault(); $("startStop").click(); }
+  else if (e.key === "[") nudge(-1000);
+  else if (e.key === "]") nudge(1000);
+  else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); $("undo").click(); }
+});
 $("plus1").onclick = () => nudge(1000);
 function tick() {
   const m = S.m, r = remaining(m);
@@ -459,7 +510,7 @@ function endMatch(type, w) {
 function goBout(i) {
   const L = S.weights.length; if (!L) return;
   i = ((i % L) + L) % L; // wraps, so a dual can start at any weight
-  winner = null; periodDone = false;
+  winner = null; periodDone = false; selEv = -1;
   change(() => {
     S.idx = i;
     const done = S.bouts.find((b) => b.wt === S.weights[i]);
@@ -471,10 +522,16 @@ $("prevW").onclick = () => goBout(S.idx - 1);
 $("nextW").onclick = () => goBout(S.idx + 1);
 
 // ---------- graphics ----------
-$("gBug").onclick = () => change(() => (S.show.bug = !S.show.bug));
-$("gNext").onclick = () => change(() => { S.show.next = !S.show.next; if (S.show.next) S.show.dual = false; });
-$("gDual").onclick = () => change(() => { S.show.dual = !S.show.dual; if (S.show.dual) S.show.next = false; });
-$("gClear").onclick = () => change(() => { S.show.next = false; S.show.dual = false; });
+function gfx(fn) { fn(G.show); G.v = Date.now(); paintGfx(); write(GFX, pack(G)).catch(() => toast("Couldn't send graphic")); }
+function paintGfx() {
+  $("gBug").textContent = "Scorebug: " + (G.show.bug ? "on" : "off");
+  $("gNext").classList.toggle("on", !!G.show.next); $("gDual").classList.toggle("on", !!G.show.dual);
+}
+$("gBug").onclick = () => gfx((g) => (g.bug = !g.bug));
+$("gNext").onclick = () => gfx((g) => {
+  G.rec = { wt: wt(), h: recOf(STATS, S.home.name, names().h), a: recOf(STATS, S.away.name, names().a) }; g.next = !g.next; if (g.next) { g.dual = false; g.lt = false; } });
+$("gDual").onclick = () => gfx((g) => { g.dual = !g.dual; if (g.dual) { g.next = false; g.lt = false; } });
+$("gClear").onclick = () => gfx((g) => { g.next = false; g.dual = false; g.lt = false; });
 
 // ---------- teams ----------
 let editKey = null;
@@ -601,6 +658,7 @@ listen("wrestle-teams", (d) => {
   if (document.getElementById("tab-teams").classList.contains("on")) renderTeams();
   if (document.getElementById("tab-lineup").classList.contains("on") && !document.activeElement.dataset?.lw) fillLineup();
 }, () => {}, 5000);
+listen(GFX, (d) => { const g = unpack(d); if (g && g.show) { G = { ...blankGfx(), ...g }; paintGfx(); } }, () => {}, 2000);
 listen("wrestle-duals", (d) => { const x = unpack(d); DUALS = (x && x.list) || []; renderDualList(); }, () => {}, 5000);
 listen("wrestle-status", (d) => { if (!d) return; if (prevAlive !== undefined && d.alive !== prevAlive) lastBeat = performance.now(); prevAlive = d.alive; }, () => {}, 3000);
 setInterval(() => { const ok = lastBeat && performance.now() - lastBeat < 15000; const p = $("pOver"); p.className = "pill " + (ok ? "ok" : "bad"); p.textContent = ok ? "Overlay online" : "Overlay offline"; }, 1000);
