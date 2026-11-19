@@ -40,17 +40,7 @@ export function suggestResult(h, a) {
   return null;
 }
 
-export function blankMatch(periodId = "1") {
-  return {
-    h: 0, a: 0,
-    period: periodId,
-    clockMs: periodById(periodId).ms,
-    running: false,
-    at: 0,
-    elapsedBefore: 0, // regulation time used in earlier periods (for fall times)
-    pen: { h: { stall: 0, pen: 0, caut: 0 }, a: { stall: 0, pen: 0, caut: 0 } },
-  };
-}
+export function blankMatch(periodId="1"){ return { h:0,a:0, period:periodId, clockMs:periodById(periodId).ms, running:false, at:0, elapsedBefore:0, pos:"N", ev:[], pen:{h:{stall:0,pen:0,caut:0},a:{stall:0,pen:0,caut:0}} }; }
 
 export function defaultState() {
   const weights = WEIGHTS.boys;
@@ -106,3 +96,49 @@ export const unpack = (d) => {
 
 export const other = (side) => (side === "h" ? "a" : "h");
 export const bandHex = (c) => (c === "green" ? "#16A34A" : c === "red" ? "#DC2626" : c);
+
+// ---- Event model (Track-style) ----
+// Each tap is an event {k, s, p, c}: k = kind, s = side (scorer, or offender for
+// penalties, or the new position for POS), p = period id, c = clock remaining (ms).
+// Score, position and penalty counts are always rebuilt from the event list,
+// so deleting any event fixes everything after it.
+export const EV = {
+  TD: { l: "Takedown", p: 3 }, E: { l: "Escape", p: 1 }, R: { l: "Reversal", p: 2 },
+  NF2: { l: "Near fall", p: 2 }, NF3: { l: "Near fall", p: 3 }, NF4: { l: "Near fall", p: 4 },
+  STALL: { l: "Stalling" }, PEN: { l: "Penalty" }, CAUT: { l: "Caution" }, ADJ: { l: "Point adjust" }, POS: { l: "Position" },
+};
+export const SCORING = ["TD", "E", "R", "NF2", "NF3", "NF4"];
+export function derive(ev = []) {
+  const sc = { h: 0, a: 0 }, pen = { h: { stall: 0, pen: 0, caut: 0 }, a: { stall: 0, pen: 0, caut: 0 } };
+  let pos = "N", dq = null;
+  const list = ev.map((e) => {
+    const o = { ...e, pts: 0, to: e.s, txt: "" };
+    if (EV[e.k] && EV[e.k].p) {
+      o.pts = EV[e.k].p; sc[e.s] += o.pts;
+      o.txt = EV[e.k].l + " +" + o.pts;
+      if (e.k === "TD" || e.k === "R") pos = e.s;
+      else if (e.k === "E") pos = "N";
+      else pos = e.s; // near fall: scorer is on top
+    } else if (e.k === "STALL") {
+      const c = ++pen[e.s].stall, opp = other(e.s);
+      if (c === 1) o.txt = "Stalling warning";
+      else if (c <= 4) { o.pts = [0, 1, 1, 2][c - 1]; o.to = opp; sc[opp] += o.pts; o.txt = "Stalling +" + o.pts; }
+      else { o.txt = "Stalling DQ"; dq = e.s; }
+    } else if (e.k === "PEN") {
+      const c = ++pen[e.s].pen, opp = other(e.s);
+      if (c <= 3) { o.pts = [1, 1, 2][c - 1]; o.to = opp; sc[opp] += o.pts; o.txt = "Penalty +" + o.pts; }
+      else { o.txt = "Penalty DQ"; dq = e.s; }
+    } else if (e.k === "CAUT") {
+      const c = ++pen[e.s].caut, opp = other(e.s);
+      if (c <= 2) o.txt = "Caution " + c;
+      else { o.pts = 1; o.to = opp; sc[opp] += 1; o.txt = "Caution +1"; }
+    } else if (e.k === "ADJ") {
+      o.pts = e.n || 0; sc[e.s] = Math.max(0, sc[e.s] + o.pts); o.txt = "Adjust " + (o.pts > 0 ? "+" : "") + o.pts;
+    } else if (e.k === "POS") {
+      pos = e.s; o.txt = e.s === "N" ? "Neutral" : "top";
+    }
+    o.h = sc.h; o.a = sc.a;
+    return o;
+  });
+  return { h: sc.h, a: sc.a, pos, pen, dq, list };
+}

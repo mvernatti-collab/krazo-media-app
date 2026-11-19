@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wrestling Stats · Krazo Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<style>
+:root{--red:#E31B23;--bg:#0c0c0f;--card:#17171c;--line:#2b2b32;--mute:#9a9aa3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif}
+.H{font-family:Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-weight:400}
+header{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+header img{height:28px}
+main{padding:14px;max-width:1300px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:14px;overflow:auto}
+.lbl{font:700 12px -apple-system,Arial;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin:2px 0 10px}
+button,select,input{font:inherit;color:#fff;background:#24242b;border:1px solid #34343c;border-radius:10px;padding:8px 12px}
+button{cursor:pointer}
+table{width:100%;border-collapse:collapse;font-size:14px;white-space:nowrap}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child,th.l,td.l{text-align:left}
+th{color:var(--mute);font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;user-select:none}
+th.on{color:#fff}
+tr.click{cursor:pointer}tr.click:hover td{background:#20202a}
+td.w{color:#7ee2a0;font-weight:700}
+.sp{flex:1}
+.kpi{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.kpi div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:140px}
+.kpi b{display:block;font-family:Anton,Impact,sans-serif;font-weight:400;font-size:34px}
+.kpi span{color:var(--mute);font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+</style>
+</head>
+<body>
+<header>
+  <img src="/pt/krazo.png" alt="Krazo Media">
+  <div class="H" style="font-size:22px">Wrestling Stats</div>
+  <div class="sp"></div>
+  <label>Team <select id="fTeam"><option value="">All teams</option></select></label>
+  <input id="fQ" placeholder="Search wrestler" size="16">
+  <button id="csv">Download CSV</button>
+  <button id="reload">Refresh</button>
+</header>
+<main>
+  <div class="kpi" id="kpi"></div>
+  <div class="card"><div class="lbl">Wrestlers <span style="text-transform:none;letter-spacing:0">· click a column to sort, click a wrestler for their matches</span></div><table id="wTbl"></table></div>
+  <div class="card" id="detail" style="display:none"></div>
+  <div class="card"><div class="lbl">Duals</div><table id="dTbl"></table></div>
+  <div class="card" id="box" style="display:none"></div>
+</main>
+<script type="module">
+import { read } from "/pt/pt-sync.js";
+import { RESULTS, derive, unpack } from "/pt/wrestle/core.js";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let DUALS = [], ROWS = [], sortKey = "W", sortDir = -1;
+
+const COLS = [
+  ["name", "Wrestler", "l"], ["team", "Team", "l"], ["wt", "Wt", "l"], ["rec", "Record"], ["W", "W"], ["L", "L"],
+  ["FALL", "Pins"], ["TF", "TF"], ["MD", "MD"], ["DEC", "Dec"], ["FOR", "Forf"],
+  ["TD", "TD"], ["E", "Esc"], ["R", "Rev"], ["NF", "NF"], ["NFp", "NF pts"], ["pf", "Pts for"], ["pa", "Pts agst"],
+  ["stall", "Stall"], ["pen", "Pen"], ["tp", "Team pts"],
+];
+
+async function load() {
+  $("wTbl").innerHTML = "<tr><td>Loading…</td></tr>";
+  const idx = unpack(await read("wrestle-duals").catch(() => null));
+  const list = (idx && idx.list) || [];
+  DUALS = (await Promise.all(list.map((d) => read("wrestle-dual-" + d.id).then(unpack).catch(() => null)))).filter(Boolean);
+  DUALS.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  build();
+}
+function build() {
+  const map = new Map();
+  for (const r of DUALS) for (const b of r.bouts || []) {
+    const d = derive(b.ev || []);
+    for (const s of ["h", "a"]) {
+      const name = (s === "h" ? b.hn : b.an) || "";
+      if (!name) continue; // open weight
+      const team = (s === "h" ? r.home : r.away).name, o = s === "h" ? "a" : "h";
+      const k = team + "|" + name.toLowerCase();
+      if (!map.has(k)) map.set(k, { name, team, wts: {}, W: 0, L: 0, FALL: 0, TF: 0, MD: 0, DEC: 0, FOR: 0, TD: 0, E: 0, R: 0, NF: 0, NFp: 0, pf: 0, pa: 0, stall: 0, pen: 0, tp: 0, m: [] });
+      const st = map.get(k), won = b.w === s;
+      st.wts[b.wt] = (st.wts[b.wt] || 0) + 1;
+      if (won) { st.W++; st.tp += b.tp; if (st[b.type] !== undefined) st[b.type]++; } else st.L++;
+      st.pf += b[s] || 0; st.pa += b[o] || 0;
+      for (const e of d.list) {
+        if (e.k === "TD" && e.s === s) st.TD++;
+        else if (e.k === "E" && e.s === s) st.E++;
+        else if (e.k === "R" && e.s === s) st.R++;
+        else if (e.k.startsWith("NF") && e.s === s) { st.NF++; st.NFp += e.pts; }
+        else if (e.k === "STALL" && e.s === s) st.stall++;
+        else if ((e.k === "PEN" || e.k === "CAUT") && e.s === s) st.pen++;
+      }
+      st.m.push({ date: r.date, opp: (s === "h" ? b.an : b.hn) || "Open", oppTeam: (s === "h" ? r.away : r.home).name, wt: b.wt, won, type: b.type, score: b.score, time: b.time });
+    }
+  }
+  ROWS = [...map.values()].map((x) => ({ ...x, wt: Object.entries(x.wts).sort((a, b) => b[1] - a[1])[0][0], rec: `${x.W}-${x.L}` }));
+  const teams = [...new Set(ROWS.map((r) => r.team))].sort();
+  const cur = $("fTeam").value;
+  $("fTeam").innerHTML = '<option value="">All teams</option>' + teams.map((t) => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join("");
+  if (!cur && teams.includes("Ozark")) $("fTeam").value = "Ozark";
+  draw();
+}
+function filtered() {
+  const t = $("fTeam").value, q = $("fQ").value.trim().toLowerCase();
+  return ROWS.filter((r) => (!t || r.team === t) && (!q || r.name.toLowerCase().includes(q)));
+}
+function draw() {
+  const rows = filtered().sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    if (sortKey === "wt") return sortDir * ((parseFloat(x) || 0) - (parseFloat(y) || 0));
+    return typeof x === "string" ? sortDir * x.localeCompare(y) : sortDir * (x - y) || b.W - a.W;
+  });
+  $("wTbl").innerHTML = `<tr>${COLS.map(([k, l, c]) => `<th data-k="${k}" class="${c || ""} ${k === sortKey ? "on" : ""}">${l}${k === sortKey ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr>` +
+    rows.map((r, i) => `<tr class="click" data-i="${ROWS.indexOf(r)}">${COLS.map(([k, , c]) => `<td class="${c || ""}">${k === "name" ? "<b>" + esc(r[k]) + "</b>" : esc(r[k])}</td>`).join("")}</tr>`).join("") ||
+    `<tr><td class="l">No bouts recorded yet. Finish a match in the scorer and it shows up here.</td></tr>`;
+  const t = $("fTeam").value, ds = DUALS.filter((d) => !t || d.home.name === t || d.away.name === t);
+  let dw = 0, dl = 0; ds.forEach((d) => { const us = t ? (d.home.name === t ? "h" : "a") : "h"; const them = us === "h" ? "a" : "h"; if (d.team[us] > d.team[them]) dw++; else if (d.team[us] < d.team[them]) dl++; });
+  const sum = (k) => rows.reduce((n, r) => n + r[k], 0);
+  $("kpi").innerHTML = (t ? `<div><b>${dw}-${dl}</b><span>${esc(t)} dual record</span></div>` : `<div><b>${ds.length}</b><span>Duals</span></div>`) +
+    `<div><b>${sum("W")}-${sum("L")}</b><span>Bout record</span></div><div><b>${sum("FALL")}</b><span>Pins</span></div><div><b>${sum("TD")}</b><span>Takedowns</span></div><div><b>${sum("NF")}</b><span>Near falls</span></div>`;
+  $("dTbl").innerHTML = `<tr><th class="l">Date</th><th class="l">Dual</th><th>Score</th><th>Bouts</th></tr>` + ds.map((d) =>
+    `<tr class="click" data-dual="${d.id}"><td class="l">${esc(d.date)}</td><td class="l">${esc(d.home.name)} vs ${esc(d.away.name)}</td><td>${d.team.h}–${d.team.a}</td><td>${(d.bouts || []).length}</td></tr>`).join("") || `<tr><td class="l">No duals saved yet.</td></tr>`;
+}
+$("wTbl").addEventListener("click", (e) => {
+  const th = e.target.closest("th"); if (th) { const k = th.dataset.k; if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = ["name", "team", "wt"].includes(k) ? 1 : -1; } return draw(); }
+  const tr = e.target.closest("tr[data-i]"); if (!tr) return;
+  const r = ROWS[+tr.dataset.i];
+  $("detail").style.display = "block";
+  $("detail").innerHTML = `<div class="lbl">${esc(r.name)} · ${esc(r.team)} · ${r.rec}</div><table><tr><th class="l">Date</th><th class="l">Wt</th><th class="l">Opponent</th><th class="l">Result</th></tr>` +
+    r.m.map((m) => `<tr><td class="l">${esc(m.date)}</td><td class="l">${esc(m.wt)}</td><td class="l">${esc(m.opp)} <span style="color:var(--mute)">${esc(m.oppTeam)}</span></td><td class="l ${m.won ? "w" : ""}">${m.won ? "W" : "L"} · ${RESULTS[m.type].label}${m.type === "FALL" ? " " + esc(m.time) : m.score ? " " + esc(m.score) : ""}</td></tr>`).join("") + "</table>";
+  $("detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+$("dTbl").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-dual]"); if (!tr) return;
+  const d = DUALS.find((x) => x.id === tr.dataset.dual);
+  $("box").style.display = "block";
+  $("box").innerHTML = `<div class="lbl">${esc(d.date)} · ${esc(d.home.name)} ${d.team.h} – ${d.team.a} ${esc(d.away.name)}</div><table><tr><th class="l">Wt</th><th class="l">${esc(d.home.name)}</th><th class="l">${esc(d.away.name)}</th><th class="l">Result</th><th>Team pts</th></tr>` +
+    (d.bouts || []).map((b) => `<tr><td class="l">${esc(b.wt)}</td><td class="l ${b.w === "h" ? "w" : ""}">${esc(b.hn || "Open")}</td><td class="l ${b.w === "a" ? "w" : ""}">${esc(b.an || "Open")}</td><td class="l">${RESULTS[b.type].label}${b.type === "FALL" ? " " + esc(b.time) : b.score ? " " + esc(b.score) : ""}</td><td>+${b.tp} ${esc((b.w === "h" ? d.home : d.away).short)}</td></tr>`).join("") + "</table>";
+  $("box").scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+$("fTeam").onchange = draw; $("fQ").oninput = draw; $("reload").onclick = load;
+$("csv").onclick = () => {
+  const rows = filtered(), q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const txt = [COLS.map((c) => q(c[1])).join(",")].concat(rows.map((r) => COLS.map(([k]) => q(r[k])).join(","))).join("\n");
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([txt], { type: "text/csv" })), download: `wrestling-stats-${$("fTeam").value || "all"}.csv` });
+  a.click();
+};
+load();
+</script>
+</body>
+</html>
