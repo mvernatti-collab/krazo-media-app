@@ -153,7 +153,8 @@ export function derive(ev = []) {
     } else if (e.k === "ADJ") {
       o.pts = e.n || 0; sc[e.s] = Math.max(0, sc[e.s] + o.pts); o.txt = "Adjust " + (o.pts > 0 ? "+" : "") + o.pts;
     } else if (e.k === "POS") {
-      pos = e.s; o.txt = e.s === "N" ? "Neutral" : "top";
+      pos = e.s;
+      o.txt = e.pick ? (e.def ? "got the deferred choice, picked " : "chose ") + ({ N: "neutral", top: "top", bot: "bottom" }[e.pick] || e.pick) : e.s === "N" ? "Neutral" : "top";
     }
     o.h = sc.h; o.a = sc.a;
     return o;
