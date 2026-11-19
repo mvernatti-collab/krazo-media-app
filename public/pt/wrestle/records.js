@@ -4,10 +4,16 @@ import { derive, unpack } from "/pt/wrestle/core.js";
 
 export const rkey = (team, name) => team + "|" + String(name || "").trim().toLowerCase();
 
+// Returns the saved duals. loadDuals.info has what happened, for status lines.
 export async function loadDuals() {
-  const idx = unpack(await read("wrestle-duals").catch(() => null));
-  const list = (idx && idx.list) || [];
-  const duals = (await Promise.all(list.map((d) => read("wrestle-dual-" + d.id).then(unpack).catch(() => null)))).filter(Boolean);
+  const info = { listed: 0, loaded: 0, error: "" };
+  let idx = null;
+  try { idx = unpack(await read("wrestle-duals")); } catch (e) { info.error = "Couldn't reach the database (" + e.message + ")"; }
+  const list = ((idx && idx.list) || []).filter((d) => d && d.id);
+  info.listed = list.length;
+  const duals = (await Promise.all(list.map((d) => read("wrestle-dual-" + d.id).then(unpack).catch(() => null)))).filter((d) => d && d.bouts);
+  info.loaded = duals.length;
+  loadDuals.info = info;
   return duals.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }
 

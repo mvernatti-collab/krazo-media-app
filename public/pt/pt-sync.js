@@ -118,10 +118,14 @@ export async function listen(id, cb, onState = () => {}, pollMs = 1000, opts = {
 
 // One-time read of a doc in the pt collection (null if missing).
 export async function read(id) {
+  // One-time reads use plain REST first: it answers quickly on every network. The SDK's
+  // getDoc can hang for a long time on networks (like school Wi-Fi) that block
+  // Firebase's live channel, which left pages like Stats stuck on "Loading".
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
+  try { return await withTimeout(restGet(id), 8000); }
+  catch (e) { console.warn("[pt] REST read failed, trying the SDK", e); }
   const s = await loadSdk();
-  if (s) {
-    try { const snap = await s.fs.getDoc(s.fs.doc(s.db, "pt", id)); return snap.exists() ? snap.data() : null; }
-    catch (e) { console.warn("[pt] getDoc failed, trying REST", e); }
-  }
-  return restGet(id);
+  if (!s) throw new Error("No connection");
+  const snap = await withTimeout(s.fs.getDoc(s.fs.doc(s.db, "pt", id)), 8000);
+  return snap.exists() ? snap.data() : null;
 }
