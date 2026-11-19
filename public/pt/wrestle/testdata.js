@@ -58,7 +58,7 @@ function simDual(r, id, date, hk, ak, rosters) {
     const f = derive(sim.ev), tp = RESULTS[type].tp; team[w2] += tp;
     bouts.push({ wt: w, w: w2, type, tp, score: ["DEC", "MD", "TF"].includes(type) ? `${Math.max(f.h, f.a)}-${Math.min(f.h, f.a)}` : "", time: type === "FALL" ? fmtElapsed(sim.time) : "", hn: l.h, an: l.a, h: f.h, a: f.a, per: "3", ev: sim.ev });
   }
-  return { id, date, division: "boys", test: true, home: H, away: A, weights: ws, lineup, team, bouts };
+  return { id, date, division: "boys", test: true, final: true, finalAt: Date.parse(date), home: H, away: A, weights: ws, lineup, team, bouts };
 }
 
 export async function loadTestData({ liveDual = false } = {}) {
@@ -76,7 +76,7 @@ export async function loadTestData({ liveDual = false } = {}) {
   for (const [id, date, hk, ak] of games) {
     const d = simDual(r, id, date, hk, ak, rosters);
     await write("wrestle-dual-" + id, pack(d));
-    list.push({ id, date, home: d.home.name, away: d.away.name, hs: d.team.h, as: d.team.a, n: d.bouts.length, test: true });
+    list.push({ id, date, home: d.home.name, away: d.away.name, hs: d.team.h, as: d.team.a, n: d.bouts.length, test: true, final: true });
   }
   list.sort((x, y) => (y.date || "").localeCompare(x.date || ""));
   await write("wrestle-duals", pack({ v: Date.now(), list }));
