@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Graphics">
+<link rel="apple-touch-icon" href="/pt/krazo.png">
 <title>Wrestling Graphics Remote · Krazo Media</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
@@ -113,9 +116,13 @@ input{width:100%}
 </main>
 <script type="module">
 import { write, listen, read } from "/pt/pt-sync.js";
-import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, pack, defaultState, makeSkew } from "/pt/wrestle/core.js";
-const SK = makeSkew();
+import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, pack, defaultState, makeSkew, CLOCK, makeSkews, localize, liveClock } from "/pt/wrestle/core.js";
+const SK = makeSkew(), SKC = makeSkews(); let CL = null;
+listen(CLOCK, (d) => { if (!d || !d.v) return; SKC.see(d.by, d.sent); if (CL && d.v <= CL.v) return; CL = { ...localize(d, SKC), bout: d.bout }; }, () => {}, 1000, { backup: true });
+
 import { GFX, blankGfx, loadDuals, buildStats, recOf, toggleCard, dualRecord, shrinkImage } from "/pt/wrestle/records.js";
+import { gate } from "/pt/wrestle/gate.js";
+await gate("gfx", "Graphics director");
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let S = defaultState(), G = blankGfx(), STATS = new Map();
@@ -175,7 +182,7 @@ function paint() {
   $("ltShow").textContent = G.show.lt ? "Update" : "Show";
   $("ltHide").classList.toggle("live", false);
   const n = lu(), m = S.m;
-  $("now").innerHTML = `${esc(wt())} lbs · ${esc(n.h || S.home.short)} ${m.h} – ${m.a} ${esc(n.a || S.away.short)} · ${periodById(m.period).label} ${fmtClock(remaining(m, SK.now()))}
+  $("now").innerHTML = `${esc(wt())} lbs · ${esc(n.h || S.home.short)} ${m.h} – ${m.a} ${esc(n.a || S.away.short)} · ${periodById(m.period).label} ${(() => { const c = liveClock(S, CL); return fmtClock(remaining(c, c === S.m ? SK.now() : Date.now())); })()}
     <small>Dual: ${esc(S.home.name)} ${S.team.h} – ${S.team.a} ${esc(S.away.name)} · bout ${S.idx + 1} of ${S.weights.length}</small>`;
   // one-tap lower thirds built from live data
   const items = [];
@@ -185,7 +192,7 @@ function paint() {
   if (last) { const w = last.w === "h" ? last.hn || S.home.name : last.an || S.away.name; items.push([`${w} wins`, `${RESULTS[last.type].label}${last.type === "FALL" ? " · " + last.time : last.score ? " · " + last.score : ""} · ${last.wt} lbs · +${last.tp} ${(last.w === "h" ? S.home : S.away).short}`]); }
   $("auto").innerHTML = '<div class="lbl" style="margin:6px 0 0">From the match</div>' + items.map(([t, s]) => `<button data-a="${esc(JSON.stringify([t, s]))}">${esc(t)}<small>${esc(s)}</small></button>`).join("");
 }
-setInterval(() => { if (S.m.running) paint(); }, 500);
+setInterval(() => { if (liveClock(S, CL).running) paint(); }, 500);
 
 // scorebug layout
 function paintLayout() {

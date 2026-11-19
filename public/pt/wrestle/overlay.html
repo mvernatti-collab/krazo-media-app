@@ -195,7 +195,7 @@ img.lg{object-fit:contain;display:block}
 </div>
 <script type="module">
 import { listen, write } from "/pt/pt-sync.js";
-import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, bandHex, defaultState, makeSkew } from "/pt/wrestle/core.js";
+import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, bandHex, defaultState, makeSkew, CLOCK, makeSkews, localize, liveClock } from "/pt/wrestle/core.js";
 import { GFX, blankGfx, logoSrc, crestSrc } from "/pt/wrestle/records.js";
 
 const QS = new URLSearchParams(location.search);
@@ -236,6 +236,7 @@ const dbg = QS.has("debug") ? Object.assign(document.body.appendChild(document.c
 let link = "connecting";
 let S = defaultState(), G = blankGfx(), base = null, frames = 0;
 const SK = makeSkew(); // lines this computer's clock up with the scorer's
+const SKC = makeSkews(); let CL = null; // shared clock record (scorer or clock operator)
 const vis = { bug: 0, pop: 0, res: 0, next: 0, dual: 0, lt: 0, brk: 0, open: 0, fin: 0, spon: 0, ts: 0 };
 const T = { pop: 0, mv: 0, st: 0, resA: 0, resB: 0, tsA: 0, tsB: 0 };   // animation timers (Date.now ms)
 let tsFrom = { h: 0, a: 0 }, tsWin = null;
@@ -454,7 +455,8 @@ function step() {
     $("spIn").style.transform = `translateY(${y}px)`;
   }
   $("bPer").textContent = periodById(S.m.period).label;
-  $("bClk").textContent = fmtClock(remaining(S.m, SK.now()));
+  const clk = liveClock(S, CL);
+  $("bClk").textContent = fmtClock(remaining(clk, clk === S.m ? SK.now() : Date.now()));
   if (dbg) dbg.textContent = `wrestle overlay · ${link} · v${S.v} · frames ${frames} · page ${document.visibilityState}`;
 }
 applyLayout();
@@ -477,6 +479,8 @@ if (QS.has("demo")) {
 } else {
   listen(DOC, (d) => { if (d) SK.see(d.sent); onState(unpack(d)); }, (st) => { link = st; }, 1000, { backup: true });
   listen(GFX, (d) => { const g = unpack(d); if (g) setG(g); }, () => {}, 1000, { backup: true });
+  listen(CLOCK, (d) => { if (!d || !d.v) return; SKC.see(d.by, d.sent); if (CL && d.v <= CL.v) return; CL = { ...localize(d, SKC), bout: d.bout }; }, () => {}, 1000, { backup: true });
+
   listen("wrestle-sponsors", (d) => { const x = unpack(d); SP = (x && x.list) || []; spIdx = -1; }, () => {}, 5000);
   const beat = () => write("wrestle-status", { alive: Date.now(), v: S.v }).catch(() => {});
   if (!QS.has("preview")) { setTimeout(beat, 1500); setInterval(beat, 5000); } // previews never claim to be the PT overlay
