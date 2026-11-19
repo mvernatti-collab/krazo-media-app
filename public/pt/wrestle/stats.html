@@ -50,8 +50,8 @@ td.w{color:#7ee2a0;font-weight:700}
   <div class="card" id="box" style="display:none"></div>
 </main>
 <script type="module">
-import { read } from "/pt/pt-sync.js";
-import { RESULTS, derive, unpack } from "/pt/wrestle/core.js";
+import { RESULTS } from "/pt/wrestle/core.js";
+import { loadDuals, buildStats } from "/pt/wrestle/records.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let DUALS = [], ROWS = [], sortKey = "W", sortDir = -1;
@@ -65,38 +65,11 @@ const COLS = [
 
 async function load() {
   $("wTbl").innerHTML = "<tr><td>Loading…</td></tr>";
-  const idx = unpack(await read("wrestle-duals").catch(() => null));
-  const list = (idx && idx.list) || [];
-  DUALS = (await Promise.all(list.map((d) => read("wrestle-dual-" + d.id).then(unpack).catch(() => null)))).filter(Boolean);
-  DUALS.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  DUALS = await loadDuals();
   build();
 }
 function build() {
-  const map = new Map();
-  for (const r of DUALS) for (const b of r.bouts || []) {
-    const d = derive(b.ev || []);
-    for (const s of ["h", "a"]) {
-      const name = (s === "h" ? b.hn : b.an) || "";
-      if (!name) continue; // open weight
-      const team = (s === "h" ? r.home : r.away).name, o = s === "h" ? "a" : "h";
-      const k = team + "|" + name.toLowerCase();
-      if (!map.has(k)) map.set(k, { name, team, wts: {}, W: 0, L: 0, FALL: 0, TF: 0, MD: 0, DEC: 0, FOR: 0, TD: 0, E: 0, R: 0, NF: 0, NFp: 0, pf: 0, pa: 0, stall: 0, pen: 0, tp: 0, m: [] });
-      const st = map.get(k), won = b.w === s;
-      st.wts[b.wt] = (st.wts[b.wt] || 0) + 1;
-      if (won) { st.W++; st.tp += b.tp; if (st[b.type] !== undefined) st[b.type]++; } else st.L++;
-      st.pf += b[s] || 0; st.pa += b[o] || 0;
-      for (const e of d.list) {
-        if (e.k === "TD" && e.s === s) st.TD++;
-        else if (e.k === "E" && e.s === s) st.E++;
-        else if (e.k === "R" && e.s === s) st.R++;
-        else if (e.k.startsWith("NF") && e.s === s) { st.NF++; st.NFp += e.pts; }
-        else if (e.k === "STALL" && e.s === s) st.stall++;
-        else if ((e.k === "PEN" || e.k === "CAUT") && e.s === s) st.pen++;
-      }
-      st.m.push({ date: r.date, opp: (s === "h" ? b.an : b.hn) || "Open", oppTeam: (s === "h" ? r.away : r.home).name, wt: b.wt, won, type: b.type, score: b.score, time: b.time });
-    }
-  }
-  ROWS = [...map.values()].map((x) => ({ ...x, wt: Object.entries(x.wts).sort((a, b) => b[1] - a[1])[0][0], rec: `${x.W}-${x.L}` }));
+  ROWS = [...buildStats(DUALS).values()];
   const teams = [...new Set(ROWS.map((r) => r.team))].sort();
   const cur = $("fTeam").value;
   $("fTeam").innerHTML = '<option value="">All teams</option>' + teams.map((t) => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join("");
