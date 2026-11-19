@@ -11,7 +11,8 @@ export async function loadDuals() {
   try { idx = unpack(await read("wrestle-duals")); } catch (e) { info.error = "Couldn't reach the database (" + e.message + ")"; }
   const list = ((idx && idx.list) || []).filter((d) => d && d.id);
   info.listed = list.length;
-  const duals = (await Promise.all(list.map((d) => read("wrestle-dual-" + d.id).then(unpack).catch(() => null)))).filter((d) => d && d.bouts);
+  info.missing = []; info.failed = [];
+  const duals = (await Promise.all(list.map((d) => read("wrestle-dual-" + d.id).then((x) => { const u = unpack(x); if (!u || !u.bouts) info.missing.push(d); return u; }).catch((e) => { info.failed.push(d); return null; })))).filter((d) => d && d.bouts);
   info.loaded = duals.length;
   loadDuals.info = info;
   return duals.sort((a, b) => (b.date || "").localeCompare(a.date || ""));

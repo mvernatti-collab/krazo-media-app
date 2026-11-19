@@ -76,7 +76,7 @@ async function load() {
   const i = loadDuals.info || {};
   $("st").innerHTML = i.error ? `<span style="color:#ff9a9a">${esc(i.error)}. Check the internet connection and tap Refresh.</span>`
     : !i.listed ? "No saved duals yet. Finish a match in the scorer (tap a result under End match), or load test data from the Broadcast Hub."
-    : `${i.loaded} saved dual${i.loaded === 1 ? "" : "s"} · updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` + (i.loaded < i.listed ? ` · ${i.listed - i.loaded} couldn't load` : "");
+    : `${i.loaded} saved dual${i.loaded === 1 ? "" : "s"} · updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` + (i.missing && i.missing.length ? ` · ${i.missing.length} listed but never saved (${i.missing.map((d) => esc((d.date || "") + " " + (d.home || "") + " vs " + (d.away || ""))).join(", ")})` : "") + (i.failed && i.failed.length ? ` · ${i.failed.length} couldn't be read (connection)` : "");
   build();
 }
 function build() {

@@ -124,7 +124,9 @@ function hub() {
       <button id="tdLoad">Load test teams + past duals</button>
       <button id="tdLive">…and put a test dual on the mat</button>
       <button id="tdDel" class="ghost">Remove test data</button>
-    </div>`;
+      <button id="tdChk" class="ghost">Check saving</button>
+    </div>
+    <div class="sub" id="tdOut" style="margin-top:8px"></div>`;
   renderLinks($("wl"), wrestlingLinks(A.codes), toast);
   renderLinks($("ol"), [
     { title: "Wrestling explainer clips", who: "Rules, scoring and penalty clips for the stream", url: location.origin + "/pt/control.html" },
@@ -145,12 +147,32 @@ function hub() {
     $("now").textContent = `${s.home.name} ${s.team.h} – ${s.team.a} ${s.away.name} · ${w} lbs on the mat`; }, () => {}, 5000);
   prInit();
   const busy = (b, on) => { b.disabled = on; b.style.opacity = on ? ".5" : "1"; };
-  $("tdLoad").onclick = async (e) => { busy(e.target, true); const r = await loadTestData(); busy(e.target, false); toast(`Loaded ${r.teams} test teams and ${r.duals} duals`); };
-  $("tdLive").onclick = async (e) => {
-    if (!confirm("Replace the dual on the mat with Ozark Test vs Stonebrook? Only do this when no real dual is being scored.")) return;
-    busy(e.target, true); await loadTestData({ liveDual: true }); busy(e.target, false); toast("Test dual is on the mat. Open the scorer.");
+  // Every button reports exactly what happened, including errors, in the box below.
+  const run = async (btn, label, fn) => {
+    busy(btn, true); $("tdOut").textContent = label + "…";
+    try { $("tdOut").textContent = await fn(); }
+    catch (err) { $("tdOut").innerHTML = `<span style="color:#ff9a9a">${esc(label)} failed: ${esc(err && err.message || err)}</span>`; }
+    busy(btn, false);
   };
-  $("tdDel").onclick = async (e) => { if (!confirm("Remove all test teams and test duals?")) return; busy(e.target, true); const n = await removeTestData(); busy(e.target, false); toast(`Removed test teams and ${n} test duals`); };
+  // Counts saved duals; with prune, drops list entries whose dual was never saved
+  // (only ones the database says don't exist, never ones that failed to load).
+  const check = async (prune = false) => { const i = unpack(await read("wrestle-duals")); const list = (i && i.list) || []; let ok = 0; const keep = [];
+    for (const d of list) { let x; try { x = unpack(await read("wrestle-dual-" + d.id)); } catch { keep.push(d); continue; } if (x && x.bouts) { ok++; keep.push(d); } }
+    const gone = list.length - keep.length;
+    if (prune && gone) await write("wrestle-duals", pack({ v: Date.now(), list: keep }));
+    return `${keep.length} duals listed · ${ok} saved with results` + (prune && gone ? ` · cleaned up ${gone} empty entr${gone === 1 ? "y" : "ies"}` : ""); };
+  $("tdLoad").onclick = (e) => run(e.target, "Loading test data", async () => { const r = await loadTestData(); return `Loaded ${r.teams} test teams and ${r.duals} duals. Now: ` + (await check()); });
+  $("tdLive").onclick = (e) => {
+    if (!confirm("Replace the dual on the mat with Ozark Test vs Stonebrook? Only do this when no real dual is being scored.")) return;
+    run(e.target, "Loading the test dual", async () => { await loadTestData({ liveDual: true }); return "Test dual is on the mat. Open the scorer. Now: " + (await check()); });
+  };
+  $("tdDel").onclick = (e) => { if (!confirm("Remove all test teams and test duals?")) return; run(e.target, "Removing test data", async () => `Removed test teams and ${await removeTestData()} test duals. Now: ` + (await check())); };
+  $("tdChk").onclick = (e) => run(e.target, "Checking saved duals", async () => {
+    const t0 = Date.now(), id = "wrestle-selftest";
+    await write(id, { ok: "yes", at: t0 });
+    const back = await read(id);
+    return (back && back.ok === "yes" ? `Database save + read OK (${Date.now() - t0} ms). ` : "Database save didn't read back. ") + (await check(true));
+  });
 }
 
 // ---- Press Row links ----
