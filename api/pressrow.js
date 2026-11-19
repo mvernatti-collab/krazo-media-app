@@ -19,9 +19,21 @@ const HOSTS = {
   "www.pressrowgridiron.com": "gridiron2w",
 };
 
-const SHIM = (debug, gameId, prefix) => String.raw`<script>
+const SHIM = (debug, gameId, prefix, origin) => String.raw`<script>
 (function(){
-  var DEBUG = ${debug ? "true" : "false"}, GAME = ${JSON.stringify(gameId || "")}, PREFIX = ${JSON.stringify(prefix)};
+  var DEBUG = ${debug ? "true" : "false"}, GAME = ${JSON.stringify(gameId || "")}, PREFIX = ${JSON.stringify(prefix)}, ORIGIN = ${JSON.stringify(origin || "")};
+
+  // --- Images (team logos, theme art) load straight from Press Row. They don't
+  // need the relay, and the logo endpoint doesn't answer through it. ---
+  (function(){
+    function fix(v){ v = String(v); if (v.indexOf(PREFIX + '/') === 0) v = v.slice(PREFIX.length); return (v.indexOf('/api/team-logo/') === 0 || v.indexOf('/themes/') === 0) ? ORIGIN + v : v; }
+    try {
+      var d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      if (d && d.set) Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, enumerable: d.enumerable, get: d.get, set: function(v){ d.set.call(this, fix(v)); } });
+      var sa = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function(n, v){ if (this instanceof HTMLImageElement && (n === 'src' || n === 'data-logo-src')) v = fix(v); return sa.call(this, n, v); };
+    } catch (e) {}
+  })();
   var st = { mode: 'starting', opened: 0, events: 0, bytes: 0, errors: 0, polls: 0, json: 'testing…', ctype: '', sample: '', empty: 0 }, log = [], box;
 
   // --- PT's overlay output is a hidden page: no animation frames, no resize
@@ -205,11 +217,15 @@ export function transform(html, host, debug, opts = {}) {
   const prefix = `/prx/${key}`;
   let out = html.split(`https://${host}`).join(prefix);
   // Relative API calls inside the page (e.g. '/api/broadcast/live/...').
-  out = out.replace(/(['"])\/api\//g, `$1${prefix}/api/`);
+  out = out.replace(/(['"])\/api\/(?!team-logo\/)/g, `$1${prefix}/api/`);
+  // Images go straight to Press Row (see SHIM): logos and theme art.
+  const esc = prefix.replace(/[/]/g, "\\/");
+  out = out.replace(new RegExp(esc + "(\\/api\\/team-logo\\/|\\/themes\\/)", "g"), `https://${host}$1`);
+  out = out.replace(/(['"])\/api\/team-logo\//g, `$1https://${host}/api/team-logo/`);
   // Drop any CSP meta that would block the injected shim.
   out = out.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
   const gm = html.match(/const gameId = "([^"]+)"/);
-  const shim = SHIM(debug, gm ? gm[1] : "", prefix);
+  const shim = SHIM(debug, gm ? gm[1] : "", prefix, `https://${host}`);
   // PT's embedded browser doesn't run CSS animations, and Press Row's graphics
   // start invisible and fade in, so they stayed invisible. Turn animations and
   // transitions off so everything shows in its final state immediately.
