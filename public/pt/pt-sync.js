@@ -69,9 +69,16 @@ async function restSet(id, data) {
 
 // Write a doc in the pt collection.
 export async function write(id, data) {
+  // Firestore's SDK rejects any field set to undefined (REST quietly stores null), so
+  // drop those first. If the SDK write fails or stalls, save over plain REST instead.
+  const clean = Object.fromEntries(Object.entries(data || {}).filter(([, v]) => v !== undefined));
   const s = await loadSdk();
-  if (s) return s.fs.setDoc(s.fs.doc(s.db, "pt", id), data);
-  return restSet(id, data);
+  if (s) {
+    try {
+      return await Promise.race([s.fs.setDoc(s.fs.doc(s.db, "pt", id), clean), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 8000))]);
+    } catch (e) { console.warn("[pt] SDK write failed, saving over REST", id, e); }
+  }
+  return restSet(id, clean);
 }
 
 // Listen to a doc in the pt collection. cb(data|null, via) on every change.

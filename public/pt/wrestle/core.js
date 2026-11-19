@@ -88,7 +88,7 @@ export function fmtElapsed(ms) {
   return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 }
 
-export const pack = (s) => ({ json: JSON.stringify(s), v: s.v, sent: Date.now() });
+export const pack = (s) => ({ json: JSON.stringify(s), v: s.v || Date.now(), sent: Date.now() });
 export const unpack = (d) => {
   if (!d || !d.json) return null;
   try { return JSON.parse(d.json); } catch { return null; }
