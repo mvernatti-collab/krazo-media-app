@@ -19,9 +19,9 @@ const HOSTS = {
   "www.pressrowgridiron.com": "gridiron2w",
 };
 
-const SHIM = (debug, gameId, prefix, origin) => String.raw`<script>
+const SHIM = (debug, gameId, prefix, origin, off) => String.raw`<script>
 (function(){
-  var DEBUG = ${debug ? "true" : "false"}, GAME = ${JSON.stringify(gameId || "")}, PREFIX = ${JSON.stringify(prefix)}, ORIGIN = ${JSON.stringify(origin || "")};
+  var DEBUG = ${debug ? "true" : "false"}, GAME = ${JSON.stringify(gameId || "")}, PREFIX = ${JSON.stringify(prefix)}, ORIGIN = ${JSON.stringify(origin || "")}, OFFS = ${JSON.stringify(off || "")};
 
   // --- Images (team logos, theme art) load straight from Press Row. They don't
   // need the relay, and the logo endpoint doesn't answer through it. ---
@@ -140,12 +140,16 @@ const SHIM = (debug, gameId, prefix, origin) => String.raw`<script>
   function draw(){
     if (!DEBUG) return;
     if (!box) { if (!document.body) return; box = document.createElement('div');
-      box.style.cssText = 'position:fixed;left:8px;top:8px;z-index:2147483647;background:rgba(0,0,0,.85);color:#7CFC9A;font:14px/1.35 Menlo,monospace;padding:8px 10px;border-radius:6px;max-width:70%;white-space:pre-wrap;pointer-events:none';
+      box.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483647;background:rgba(0,0,0,.85);color:#7CFC9A;font:14px/1.35 Menlo,monospace;padding:8px 10px;border-radius:6px;max-width:70%;white-space:pre-wrap;pointer-events:none';
       document.body.appendChild(box); }
-    box.textContent = 'Krazo relay v2 · ' + navigator.userAgent.replace(/.*AppleWebKit\//, 'WebKit ') +
+    box.textContent = 'Krazo relay v3 · off: ' + (OFFS || 'none') + (/(^|,)(img|all)(,|$)/.test(OFFS) ? '  ← this hides logos' : '') + ' · ' + navigator.userAgent.replace(/.*AppleWebKit\//, 'WebKit ') +
       '\nMode: ' + st.mode + ' · opened ' + st.opened + ' · bytes ' + st.bytes + ' · events ' + st.events + ' · polls ' + st.polls + ' · errors ' + st.errors +
-      '\nRelay JSON test: ' + st.json + '\n' + dom() + '\nStream reply: ' + (st.ctype || '—') + (st.sample ? '\nFirst bytes: ' + JSON.stringify(st.sample) : '') + (log.length ? '\nErrors:\n' + log.slice(-6).join('\n') : '\nNo script errors');
+      '\nRelay JSON test: ' + st.json + '\n' + dom() + '\nStream reply: ' + (st.ctype || '—') + (st.sample ? '\nFirst bytes: ' + JSON.stringify(st.sample) : '') + '\n' + logos() + (log.length ? '\nErrors:\n' + log.slice(-6).join('\n') : '\nNo script errors');
   }
+  function logos(){ var im = [].slice.call(document.querySelectorAll('img')).filter(function(i){ return /team-logo|logo/i.test((i.getAttribute('src') || '') + ' ' + (i.alt || '') + ' ' + (i.className || '')); });
+    if (!im.length) return 'Logos: none on the page';
+    return 'Logos: ' + im.slice(0, 4).map(function(i){ var src = i.currentSrc || i.src || '', ok = i.complete && i.naturalWidth > 0, cs = getComputedStyle(i); return (i.alt || '?') + ' ' + (ok ? 'loaded ' + i.naturalWidth + '×' + i.naturalHeight : i.complete ? 'FAILED' : 'loading') + (cs.display === 'none' ? ' (hidden)' : '') + ' from ' + src.replace(/^https?:\/\//, '').split('/')[0]; }).join(' | '); }
+  setInterval(draw, 2000);
   function add(s){ log.push(String(s && s.message ? s.message : s).slice(0, 240)); draw(); }
   window.addEventListener('error', function(e){ var t = e.target; if (t && t !== window && t.tagName) { if (t.tagName !== 'IMG') add('could not load ' + t.tagName.toLowerCase()); return; } add((e.message || 'error') + ' @line ' + (e.lineno || '?')); }, true);
   ['error','warn'].forEach(function(k){ var o = console[k]; console[k] = function(){ try { var a = [].slice.call(arguments).map(function(x){ return x && x.stack ? (x.message + ' | ' + String(x.stack).split('\n')[0]) : (x && x.message) || String(x); }); add('console.' + k + ': ' + a.join(' ')); } catch (e) {} return o && o.apply(console, arguments); }; });
@@ -225,7 +229,8 @@ export function transform(html, host, debug, opts = {}) {
   // Drop any CSP meta that would block the injected shim.
   out = out.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
   const gm = html.match(/const gameId = "([^"]+)"/);
-  const shim = SHIM(debug, gm ? gm[1] : "", prefix, `https://${host}`);
+  const off = opts.off === undefined || opts.off === "" ? "clip,radius,shadow,op" : opts.off === "none" ? "" : opts.off;
+  const shim = SHIM(debug, gm ? gm[1] : "", prefix, `https://${host}`, off);
   // PT's embedded browser doesn't run CSS animations, and Press Row's graphics
   // start invisible and fade in, so they stayed invisible. Turn animations and
   // transitions off so everything shows in its final state immediately.
@@ -239,7 +244,6 @@ export function transform(html, host, debug, opts = {}) {
   // Default for PT: these four features made the scorebug vanish from PT's
   // overlay output (tested in PT, Nov 2026). &off=none keeps Press Row's look;
   // &off=<list> overrides.
-  const off = opts.off === undefined || opts.off === "" ? "clip,radius,shadow,op" : opts.off === "none" ? "" : opts.off;
   const place = placementCss(opts) + offCss(off);
   if (/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, noAnim + place + '</head>');
   else out = noAnim + place + out;
