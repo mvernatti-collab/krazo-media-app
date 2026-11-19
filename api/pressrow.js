@@ -26,12 +26,22 @@ const SHIM = (debug, gameId, prefix, origin, off) => String.raw`<script>
   // --- Images (team logos, theme art) load straight from Press Row. They don't
   // need the relay, and the logo endpoint doesn't answer through it. ---
   (function(){
-    function fix(v){ v = String(v); if (v.indexOf(PREFIX + '/') === 0) v = v.slice(PREFIX.length); return (v.indexOf('/api/team-logo/') === 0 || v.indexOf('/themes/') === 0) ? ORIGIN + v : v; }
+    function fix(v){ v = String(v); var j = v.indexOf(ORIGIN + '/api/team-logo/'); if (j > 0) return v.slice(j); if (v.indexOf(location.origin + PREFIX + '/') === 0) v = v.slice(location.origin.length); if (v.indexOf(PREFIX + '/') === 0) v = v.slice(PREFIX.length); return (v.indexOf('/api/team-logo/') === 0 || v.indexOf('/themes/') === 0) ? ORIGIN + v : v; }
     try {
       var d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
       if (d && d.set) Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, enumerable: d.enumerable, get: d.get, set: function(v){ d.set.call(this, fix(v)); } });
       var sa = Element.prototype.setAttribute;
       Element.prototype.setAttribute = function(n, v){ if (this instanceof HTMLImageElement && (n === 'src' || n === 'data-logo-src')) v = fix(v); return sa.call(this, n, v); };
+    } catch (e) {}
+    // Logos added through innerHTML skip the setters above, so also check new images.
+    function sweep(root){ var list = root && root.querySelectorAll ? root.querySelectorAll('img') : [];
+      for (var i = 0; i < list.length; i++) { var im = list[i], a = im.getAttribute('src'); if (a) { var f = fix(a); if (f !== a) sa.call(im, 'src', f); } } }
+    try {
+      var sa2 = Element.prototype.setAttribute, sa = sa || sa2;
+      new MutationObserver(function(ms){ for (var i = 0; i < ms.length; i++) { var m = ms[i];
+        if (m.type === 'attributes') { var a = m.target.getAttribute('src'); if (a) { var f = fix(a); if (f !== a) sa.call(m.target, 'src', f); } }
+        else for (var j = 0; j < m.addedNodes.length; j++) { var n = m.addedNodes[j]; if (n.tagName === 'IMG') { var b = n.getAttribute('src'); if (b && fix(b) !== b) sa.call(n, 'src', fix(b)); } else sweep(n); } } })
+        .observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
     } catch (e) {}
   })();
   var st = { mode: 'starting', opened: 0, events: 0, bytes: 0, errors: 0, polls: 0, json: 'testing…', ctype: '', sample: '', empty: 0 }, log = [], box;
@@ -225,7 +235,12 @@ export function transform(html, host, debug, opts = {}) {
   // Images go straight to Press Row (see SHIM): logos and theme art.
   const esc = prefix.replace(/[/]/g, "\\/");
   out = out.replace(new RegExp(esc + "(\\/api\\/team-logo\\/|\\/themes\\/)", "g"), `https://${host}$1`);
-  out = out.replace(/(['"])\/api\/team-logo\//g, `$1https://${host}/api/team-logo/`);
+  // Press Row builds logo addresses as baseUrl + '/api/team-logo/...'; baseUrl now
+  // points at the relay (for data), so swap in the real Press Row origin. This must
+  // run before the plain-string rule below, or the two combine into a broken address.
+  out = out.replace(/\bbaseUrl\s*\+\s*(['"`])\/api\/team-logo\//g, `$1https://${host}/api/team-logo/`);
+  out = out.replace(/\$\{baseUrl\}\/api\/team-logo\//g, `https://${host}/api/team-logo/`);
+  // Other relative logo paths are fixed in the page as they're set (SHIM fix()).
   // Drop any CSP meta that would block the injected shim.
   out = out.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
   const gm = html.match(/const gameId = "([^"]+)"/);
