@@ -20,8 +20,10 @@ img.lg{object-fit:contain;display:block}
 .R{background:#ED1C24}.K{background:#0d0d10}.K2{background:#17171c}.K3{background:#24242b}
 
 /* scorebug */
-#bugBox{left:60px;bottom:56px;width:780px;height:262px}
-#bug{color:#fff}
+#grp{position:absolute;left:60px;bottom:56px;width:900px;height:470px;transform-origin:left bottom}
+#bugBox{left:0;bottom:0;width:780px;height:262px}
+#bug{color:#fff;display:flex;flex-direction:column}
+#bug .hdr{order:0}#bug .ftr{order:9}
 #bug .hdr{display:flex;height:52px}
 #bug .hdr div{display:flex;align-items:center;font-size:34px;padding:0 20px}
 #bug .hdr .per{margin-left:auto}
@@ -39,14 +41,14 @@ img.lg{object-fit:contain;display:block}
 #bug .ftr .sq{width:14px;height:30px}
 
 /* small pop (escapes, penalties) */
-#popBox{left:60px;bottom:322px;width:780px;height:96px}
+#popBox{left:0;bottom:266px;width:780px;height:96px}
 #pop{display:flex;color:#fff}
 #pop .side{width:16px}
 #pop .txt{flex:1;display:flex;align-items:center;padding:0 24px;font-size:50px;background:#0d0d10}
 #pop .pts{width:150px;display:flex;align-items:center;justify-content:center;font-size:66px}
 
 /* move stinger (takedown, reversal, near fall) */
-#mvBox{left:60px;bottom:322px;width:900px;height:140px}
+#mvBox{left:0;bottom:266px;width:900px;height:140px}
 #mv .bg{position:absolute;left:0;top:0;width:900px;height:140px;background:#0d0d10;transform-origin:0 0}
 #mv .side{position:absolute;left:0;top:0;width:18px;height:140px}
 #mv .wipe{position:absolute;left:0;top:0;width:900px;height:140px;background:#ED1C24}
@@ -120,6 +122,7 @@ img.lg{object-fit:contain;display:block}
 #dual td.tp{width:110px;text-align:center}
 #dual .tot{display:flex;height:84px;align-items:center;justify-content:center;gap:30px;font-size:56px;background:#24242b}
 #dual .tot img{width:80px;height:66px}
+#brk{display:flex;flex-direction:column}#brk .hd{order:0}#brk .ft{order:9}
 #brk .rw{display:flex;height:120px;border-top:4px solid #0d0d10;background:#17171c}
 #brk .rw .band{width:20px}
 #brk .rw img{width:130px;height:96px;margin:12px 0 12px 20px}
@@ -154,6 +157,7 @@ img.lg{object-fit:contain;display:block}
 <div id="stage">
   <div class="clipbox" id="spBox"><div class="slide" id="sp"><div class="lab H">Presented by</div><div class="win"><div class="in" id="spIn"><img id="spImg" alt=""><span class="H" id="spTx"></span></div></div></div></div>
   <div class="clipbox" id="tsBox"><div class="slide" id="ts"><div class="lab H">Dual score</div><div class="row H"><img class="lg" id="tsLh" alt=""><div class="n" id="tsNh"></div><div class="sc" id="tsSh"></div><div class="dash">–</div><div class="sc" id="tsSa"></div><div class="n" id="tsNa" style="justify-content:flex-end"></div><img class="lg" id="tsLa" alt=""></div></div></div>
+  <div id="grp">
   <div class="clipbox" id="popBox"><div class="slide" id="pop"><div class="side"></div><div class="txt H"></div><div class="pts H"></div></div></div>
   <div class="clipbox" id="mvBox"><div class="slide" id="mv"><div class="bg"></div><div class="side"></div><img class="lg" id="mvL" alt=""><div class="t H" id="mvT"></div><div class="s H" id="mvS"></div><div class="p H" id="mvP"></div><div class="wipe"></div></div></div>
   <div class="clipbox" id="bugBox"><div class="slide" id="bug">
@@ -162,6 +166,7 @@ img.lg{object-fit:contain;display:block}
     <div class="rowW" id="rowA"><div class="band"></div><div class="tm H"></div><div class="nm H"></div><div class="pt H"></div></div>
     <div class="ftr H"><span class="lab">DUAL</span><span class="ts" id="fH"></span><span class="ts" id="fA"></span></div>
   </div></div>
+  </div>
   <div class="clipbox" id="ltBox"><div class="slide" id="lt"><div class="bar"></div><div class="tx"><div class="t1 H" id="lt1"></div><div class="t2 H" id="lt2"></div></div></div></div>
   <div class="clipbox" id="resBox"><div class="slide" id="res">
     <div class="tag H"><div class="k">RESULT</div><div class="tp" id="rTp">+6</div><div class="tl">TEAM PTS</div></div>
@@ -190,7 +195,7 @@ img.lg{object-fit:contain;display:block}
 </div>
 <script type="module">
 import { listen, write } from "/pt/pt-sync.js";
-import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, bandHex, defaultState } from "/pt/wrestle/core.js";
+import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, bandHex, defaultState, makeSkew } from "/pt/wrestle/core.js";
 import { GFX, blankGfx, logoSrc, crestSrc } from "/pt/wrestle/records.js";
 
 const QS = new URLSearchParams(location.search);
@@ -200,13 +205,37 @@ const stage = $("stage");
 const fit = () => { stage.style.transform = `scale(${Math.min(innerWidth / 1920, innerHeight / 1080) || 1})`; };
 addEventListener("resize", fit); fit();
 
-const pos = QS.get("pos") || "bl";
-if (pos.includes("r")) { for (const id of ["bugBox", "popBox", "mvBox"]) { $(id).style.left = "auto"; $(id).style.right = "60px"; } $("resBox").style.left = "60px"; $("ltBox").style.left = "60px"; }
-if (pos.includes("t")) { $("bugBox").style.bottom = "auto"; $("bugBox").style.top = "56px"; for (const id of ["popBox", "mvBox"]) { $(id).style.bottom = "auto"; $(id).style.top = "330px"; } $("tsBox").style.top = "auto"; $("tsBox").style.bottom = "40px"; }
+// Scorebug placement: corner + size + nudge come from the graphics remote (G.layout);
+// ?pos=bl|br|tl|tr in the URL is the fallback. Sizing happens here, not in PT.
+const LAY = { top: false, right: false };
+function applyLayout() {
+  const L0 = (G && G.layout) || {};
+  const p = L0.pos || QS.get("pos") || "bl", sc = Math.max(0.5, Math.min(1.6, +L0.scale || 1)), x = +L0.x || 0, y = +L0.y || 0;
+  LAY.top = p.includes("t"); LAY.right = p.includes("r");
+  const g = $("grp").style;
+  g.left = LAY.right ? "auto" : 60 + x + "px"; g.right = LAY.right ? 60 - x + "px" : "auto";
+  g.bottom = LAY.top ? "auto" : 56 + y + "px"; g.top = LAY.top ? 56 - y + "px" : "auto";
+  g.transformOrigin = `${LAY.right ? "right" : "left"} ${LAY.top ? "top" : "bottom"}`; g.transform = `scale(${sc})`;
+  for (const id of ["bugBox", "popBox", "mvBox"]) {
+    const e = $(id).style, up = id === "bugBox" ? 0 : 266;
+    e.left = LAY.right ? "auto" : "0"; e.right = LAY.right ? "0" : "auto";
+    e.bottom = LAY.top ? "auto" : up + "px"; e.top = LAY.top ? up + "px" : "auto";
+  }
+  // result + custom lower thirds sit beside the bug, on the other side
+  const bugW = 780 * sc;
+  for (const id of ["resBox", "ltBox"]) {
+    const e = $(id).style;
+    if (LAY.right) { e.left = Math.max(40, Math.min(880, 1920 - 60 + x - bugW - 40 - 980)) + "px"; }
+    else e.left = Math.max(880, Math.min(1900 - 980, 60 + x + bugW + 40)) + "px";
+    e.bottom = LAY.top ? "auto" : "56px"; e.top = LAY.top ? "56px" : "auto";
+  }
+  $("tsBox").style.top = LAY.top ? "auto" : "40px"; $("tsBox").style.bottom = LAY.top ? "40px" : "auto";
+}
 
 const dbg = QS.has("debug") ? Object.assign(document.body.appendChild(document.createElement("div")), { id: "dbg" }) : null;
 let link = "connecting";
 let S = defaultState(), G = blankGfx(), base = null, frames = 0;
+const SK = makeSkew(); // lines this computer's clock up with the scorer's
 const vis = { bug: 0, pop: 0, res: 0, next: 0, dual: 0, lt: 0, brk: 0, open: 0, fin: 0, spon: 0, ts: 0 };
 const T = { pop: 0, mv: 0, st: 0, resA: 0, resB: 0, tsA: 0, tsB: 0 };   // animation timers (Date.now ms)
 let tsFrom = { h: 0, a: 0 }, tsWin = null;
@@ -230,6 +259,21 @@ async function resolveLogos() {
 
 function paintStatic() {
   const lu = S.lineup[S.weights[S.idx]] || {};
+  // which team shows first (top row / left side)
+  const F = S.flip ? "a" : "h", Sd = F === "h" ? "a" : "h", ord = (s) => (s === F ? 1 : 3);
+  $("rowH").style.order = ord("h"); $("rowA").style.order = ord("a");
+  $("fH").style.order = ord("h"); $("fA").style.order = ord("a");
+  $("kH").style.order = ord("h"); $("kA").style.order = ord("a");
+  for (const [h, a] of [["nH", "nA"], ["oLh", "oLa"], ["fLh", "fLa"]]) {
+    const eh = $(h).closest(".tm") || $(h), ea = $(a).closest(".tm") || $(a);
+    eh.style.order = ord("h"); ea.style.order = ord("a");
+  }
+  $("nH").style.textAlign = F === "h" ? "left" : "right"; $("nH").style.alignItems = F === "h" ? "flex-start" : "flex-end";
+  $("nA").style.textAlign = F === "a" ? "left" : "right"; $("nA").style.alignItems = F === "a" ? "flex-start" : "flex-end";
+  const tsO = S.flip ? ["tsLa", "tsNa", "tsSa", null, "tsSh", "tsNh", "tsLh"] : ["tsLh", "tsNh", "tsSh", null, "tsSa", "tsNa", "tsLa"];
+  tsO.forEach((id, i) => { if (id) $(id).style.order = i; });
+  $("tsSh").parentElement.querySelector(".dash").style.order = 3;
+  $(S.flip ? "tsNa" : "tsNh").style.justifyContent = "flex-start"; $(S.flip ? "tsNh" : "tsNa").style.justifyContent = "flex-end";
   $("bWt").textContent = (S.weights[S.idx] || "") + " LBS";
   for (const s of ["h", "a"]) {
     const r = $(s === "h" ? "rowH" : "rowA"), t = teamOf(s);
@@ -253,8 +297,8 @@ function paintStatic() {
   $("dTitle").textContent = `${S.home.short} vs ${S.away.short}`;
   const done = {}; S.bouts.forEach((b) => (done[b.wt] = b));
   $("dTbl").innerHTML = S.weights.map((w) => { const b = done[w], l = S.lineup[w] || {};
-    return `<tr class="H"><td class="wt">${esc(w)}</td><td class="${b && b.w === "h" ? "w" : ""}">${esc(l.h || "—")}</td><td class="${b && b.w === "a" ? "w" : ""}">${esc(l.a || "—")}</td><td>${b ? RESULTS[b.type].label + (b.type === "FALL" ? " " + b.time : b.score ? " " + b.score : "") : ""}</td><td class="tp">${b ? "+" + b.tp + " " + esc(teamOf(b.w).short) : ""}</td></tr>`; }).join("");
-  $("dTot").innerHTML = `${L.h ? `<img class="lg" src="${L.h}" alt="">` : ""}${esc(S.home.name)} ${S.team.h} <span style="color:#777">–</span> ${S.team.a} ${esc(S.away.name)}${L.a ? `<img class="lg" src="${L.a}" alt="">` : ""}`;
+    return `<tr class="H"><td class="wt">${esc(w)}</td><td class="${b && b.w === F ? "w" : ""}">${esc(l[F] || "—")}</td><td class="${b && b.w === Sd ? "w" : ""}">${esc(l[Sd] || "—")}</td><td>${b ? RESULTS[b.type].label + (b.type === "FALL" ? " " + b.time : b.score ? " " + b.score : "") : ""}</td><td class="tp">${b ? "+" + b.tp + " " + esc(teamOf(b.w).short) : ""}</td></tr>`; }).join("");
+  $("dTot").innerHTML = `${L[F] ? `<img class="lg" src="${L[F]}" alt="">` : ""}${esc(teamOf(F).name)} ${S.team[F]} <span style="color:#777">–</span> ${S.team[Sd]} ${esc(teamOf(Sd).name)}${L[Sd] ? `<img class="lg" src="${L[Sd]}" alt="">` : ""}`;
   // period break
   const per = periodById(S.m.period);
   $("kT").textContent = per.id.length === 1 ? "End of period " + per.id : "End of " + per.label;
@@ -292,6 +336,7 @@ function paintStatic() {
 function onState(s) {
   if (!s) return;
   const first = base === null;
+  if (!first && (s.v || 0) < (S.v || 0)) return; // an older copy arriving late
   S = s;
   if (first) base = { pop: s.pop.n || 0, res: s.res.n || 0 };
   else {
@@ -359,11 +404,11 @@ function step() {
   approach("lt", sh.lt && !anyCard && !resOn && !stOn, dt);
   approach("spon", sh.spon && SP.length && !bigc, dt, 420);
   for (const k of ["next", "dual", "brk", "open", "fin"]) approach(k, sh[k], dt, 420);
-  const fromBottom = !pos.includes("t");
+  const fromBottom = !LAY.top;
   Y("bug", vis.bug, fromBottom ? 270 : -270);
   Y("pop", vis.pop, fromBottom ? 100 : -100);
   Y("res", vis.res, 270); Y("lt", vis.lt, 160);
-  Y("ts", vis.ts, pos.includes("t") ? 160 : -160);
+  Y("ts", vis.ts, LAY.top ? 160 : -160);
   Y("sp", vis.spon, -160);
   for (const k of ["next", "dual", "brk"]) { Y(k, vis[k], 880); $(k).style.visibility = vis[k] > 0 ? "visible" : "hidden"; }
   for (const k of ["open", "fin"]) { Y(k, vis[k], 920); $(k).style.visibility = vis[k] > 0 ? "visible" : "hidden"; }
@@ -409,13 +454,14 @@ function step() {
     $("spIn").style.transform = `translateY(${y}px)`;
   }
   $("bPer").textContent = periodById(S.m.period).label;
-  $("bClk").textContent = fmtClock(remaining(S.m));
+  $("bClk").textContent = fmtClock(remaining(S.m, SK.now()));
   if (dbg) dbg.textContent = `wrestle overlay · ${link} · v${S.v} · frames ${frames} · page ${document.visibilityState}`;
 }
+applyLayout();
 (function raf() { step(); requestAnimationFrame(raf); })();
 setInterval(step, 33);
 
-function setG(g) { const b = blankGfx(); G = { ...b, ...g, show: { ...b.show, ...(g.show || {}) }, lt: { ...b.lt, ...(g.lt || {}) }, open: { ...b.open, ...(g.open || {}) } }; paintStatic(); }
+function setG(g) { if (G.v && g.v && g.v < G.v) return; const b = blankGfx(); G = { ...b, ...g, show: { ...b.show, ...(g.show || {}) }, lt: { ...b.lt, ...(g.lt || {}) }, open: { ...b.open, ...(g.open || {}) }, layout: { ...b.layout, ...(g.layout || {}) } }; applyLayout(); paintStatic(); }
 if (QS.has("demo")) {
   // ?demo=<card list> previews with sample data, e.g. ?demo=open or ?demo=td or ?demo=fall
   const d = defaultState();
@@ -429,8 +475,8 @@ if (QS.has("demo")) {
   if (want.includes("td")) setTimeout(() => showPop({ side: "h", k: "TD", pts: 3, wt: "144", text: "TAKEDOWN" }), 300);
   if (want.includes("fall")) setTimeout(() => showRes({ w: "h", type: "FALL", tp: 6, time: "1:42", wt: "144", hn: "Jake Miller" }), 300);
 } else {
-  listen(DOC, (d) => onState(unpack(d)), (st) => { link = st; });
-  listen(GFX, (d) => { const g = unpack(d); if (g) setG(g); });
+  listen(DOC, (d) => { if (d) SK.see(d.sent); onState(unpack(d)); }, (st) => { link = st; }, 1000, { backup: true });
+  listen(GFX, (d) => { const g = unpack(d); if (g) setG(g); }, () => {}, 1000, { backup: true });
   listen("wrestle-sponsors", (d) => { const x = unpack(d); SP = (x && x.list) || []; spIdx = -1; }, () => {}, 5000);
   const beat = () => write("wrestle-status", { alive: Date.now(), v: S.v }).catch(() => {});
   if (!QS.has("preview")) { setTimeout(beat, 1500); setInterval(beat, 5000); } // previews never claim to be the PT overlay

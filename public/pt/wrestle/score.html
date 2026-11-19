@@ -138,6 +138,10 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
     <div class="wr a" id="wrA"></div>
   </div>
 
+  <div class="row" style="justify-content:center;margin-top:8px">
+    <button id="swapSides" class="ghost" style="font-size:13px;padding:6px 10px">⇄ Swap sides</button>
+    <button id="swapColors" class="ghost" style="font-size:13px;padding:6px 10px">⇄ Swap colors</button>
+  </div>
   <div class="posbar">
     <span class="cur H" id="posCur">Neutral</span>
     <button data-pos="N">Neutral</button>
@@ -194,9 +198,11 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
       <label>Away <select id="lAway"></select></label>
       <label>Date <input type="date" id="lDate"></label>
       <label>Weights <select id="division"><option value="boys">Boys (106–285)</option><option value="girls">Girls (100–235)</option></select></label>
-      <label><input type="checkbox" id="swapBands"> Home wears red</label>
+      <label>Home wears <select id="bandH"><option value="green">Green</option><option value="red">Red</option><option value="blue">Blue</option><option value="yellow">Yellow</option><option value="orange">Orange</option><option value="purple">Purple</option><option value="black">Black</option><option value="white">White</option><option value="team">Team color</option></select></label>
+      <label>Away wears <select id="bandA"><option value="green">Green</option><option value="red">Red</option><option value="blue">Blue</option><option value="yellow">Yellow</option><option value="orange">Orange</option><option value="purple">Purple</option><option value="black">Black</option><option value="white">White</option><option value="team">Team color</option></select></label>
+      <label>Home sits on the <select id="homeSide"><option value="L">Left</option><option value="R">Right</option></select></label>
     </div>
-    <div style="color:var(--mute);font-size:13px;margin-top:8px">Pick saved teams (add them on the Teams tab). Wrestler boxes suggest that team's roster. Leave a box empty for an open weight.</div>
+    <div style="color:var(--mute);font-size:13px;margin-top:8px">"Sits on the" sets which side of the scorer screen each team is on (match it to what you see from the table) and which team is listed first on the stream graphics. Pick saved teams (add them on the Teams tab). Wrestler boxes suggest that team's roster. Leave a box empty for an open weight.</div>
   </div>
   <div class="card">
     <div class="row" style="margin-bottom:8px">
@@ -255,7 +261,7 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 <script type="module">
 import { write, listen, read } from "/pt/pt-sync.js";
 import { GFX, blankGfx, loadDuals, buildStats, recOf, toggleCard, dualRecord as teamDualRec, shrinkImage, logoSrc } from "/pt/wrestle/records.js";
-import { DOC, WEIGHTS, PERIODS, periodById, RESULTS, suggestResult, blankMatch, defaultState, remaining, fmtClock, matchElapsed, fmtElapsed, pack, unpack, other, bandHex, derive, SCORING } from "/pt/wrestle/core.js";
+import { DOC, WEIGHTS, PERIODS, periodById, RESULTS, suggestResult, blankMatch, defaultState, remaining, fmtClock, matchElapsed, fmtElapsed, pack, unpack, other, bandHex, bandName, derive, SCORING } from "/pt/wrestle/core.js";
 
 let S = defaultState();
 let TEAMS = {};          // saved teams: key -> {name, short, color, roster:[{wt,name}]}
@@ -338,7 +344,7 @@ function wrHtml(s) {
   const role = pos === "N" ? ["NEUTRAL", ""] : pos === s ? ["TOP", "top"] : ["BOTTOM", "bot"];
   return `<div class="role ${role[1]}">${role[0]}</div>
     <div class="nm H" data-rename="${s}" title="Tap to change wrestler">${esc(nm(s))}</div>
-    <div class="tm"><i style="background:${bandHex(S.bands[s])}"></i>${esc(t.name)} · ${S.bands[s]}</div>
+    <div class="tm"><i style="background:${bandHex(S.bands[s])}"></i>${esc(t.name)} · ${bandName(S.bands[s])}</div>
     <div class="sc H">${S.m[s]}</div>`;
 }
 function btn(data, label, val, cls = "") { return `<button class="sc ${cls}" data-act="${data}"><b>${val}</b>${label}</button>`; }
@@ -379,6 +385,10 @@ function render() {
   $("dH").textContent = S.home.short; $("dA").textContent = S.away.short; $("dHs").textContent = S.team.h; $("dAs").textContent = S.team.a;
   $("wrH").innerHTML = wrHtml("h"); $("wrA").innerHTML = wrHtml("a");
   $("actH").innerHTML = actHtml("h"); $("actA").innerHTML = actHtml("a");
+  $("wrH").style.borderColor = bandHex(S.bands.h); $("wrA").style.borderColor = bandHex(S.bands.a);
+  const lo = S.flip ? { h: 3, a: 1 } : { h: 1, a: 3 };
+  $("wrH").style.order = lo.h; $("wrA").style.order = lo.a; $("actH").parentElement.style.order = lo.h; $("actA").parentElement.style.order = lo.a;
+  document.querySelector(".board .mid").style.order = 2; document.querySelector(".acts .logc").style.order = 2;
   $("penH").innerHTML = penHtml("h"); $("penA").innerHTML = penHtml("a");
   $("penHl").textContent = "Penalties on " + S.home.short; $("penAl").textContent = "Penalties on " + S.away.short;
   $("posCur").textContent = S.m.pos === "N" ? "Neutral" : team(S.m.pos).short + " top";
@@ -526,6 +536,8 @@ function goBout(i) {
     if (done && done.ev) { S.m.ev = done.ev.slice(); S.m.period = done.per || "1"; S.m.clockMs = 0; }
   });
 }
+$("swapSides").onclick = () => { change(() => (S.flip = !S.flip)); toast(`${(S.flip ? S.away : S.home).short} now on the left`); };
+$("swapColors").onclick = () => { change(() => (S.bands = { h: S.bands.a, a: S.bands.h })); toast(`${S.home.short} wears ${bandName(S.bands.h)}`); };
 $("prevW").onclick = () => goBout(S.idx - 1);
 $("nextW").onclick = () => goBout(S.idx + 1);
 
@@ -592,7 +604,8 @@ function homeKey() { return S.homeKey || keyOf(S.home.name); }
 function awayKey() { return S.awayKey || keyOf(S.away.name); }
 function fillLineup() {
   $("lHome").innerHTML = teamOpts(homeKey()); $("lAway").innerHTML = teamOpts(awayKey());
-  $("lDate").value = S.date || today(); $("division").value = S.division; $("swapBands").checked = S.bands.h === "red";
+  $("lDate").value = S.date || today(); $("division").value = S.division; const bsel = (c, t) => (c && c.startsWith && c.startsWith("#") ? (c.toLowerCase() === (t.color || "").toLowerCase() ? "team" : "green") : c || "green");
+  $("bandH").value = bsel(S.bands.h, S.home); $("bandA").value = bsel(S.bands.a, S.away); $("homeSide").value = S.flip ? "R" : "L";
   drawLineup(S.weights, S.lineup);
 }
 function rosterOpts(k, w) {
@@ -645,7 +658,8 @@ async function applyLineup(fresh) {
     if (A) { S.away = { name: A.name, short: A.short, color: A.color, logo: A.logo || "" }; S.awayKey = ak; }
     S.date = $("lDate").value || today();
     S.division = $("division").value; S.weights = ws.slice(); S.lineup = lu;
-    S.bands = $("swapBands").checked ? { h: "red", a: "green" } : { h: "green", a: "red" };
+    const bv = (id, t) => ($(id).value === "team" ? t.color : $(id).value);
+    S.bands = { h: bv("bandH", S.home), a: bv("bandA", S.away) }; S.flip = $("homeSide").value === "R";
     if (S.idx >= S.weights.length) S.idx = 0;
   });
   await saveDual();

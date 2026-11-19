@@ -47,7 +47,7 @@ export function recOf(stats, team, name) { const x = name && stats.get(rkey(team
 // operator can both push without overwriting each other's scoring data.
 export const GFX = "wrestle-gfx";
 export const CARDS = ["next", "dual", "open", "brk", "fin"]; // full cards: only one at a time
-export const blankGfx = () => ({ v: 0, show: { bug: true, next: false, dual: false, lt: false, open: false, brk: false, fin: false, spon: false }, lt: { title: "", sub: "" }, rec: { h: "", a: "" }, open: { h: "", a: "" } });
+export const blankGfx = () => ({ v: 0, show: { bug: true, next: false, dual: false, lt: false, open: false, brk: false, fin: false, spon: false }, lt: { title: "", sub: "" }, rec: { h: "", a: "" }, open: { h: "", a: "" }, layout: { pos: "", scale: 1, x: 0, y: 0 } });
 // Turn one full card on (or off) and every other card off.
 export function toggleCard(show, which) { const on = !show[which]; CARDS.forEach((c) => (show[c] = false)); show[which] = on; if (on) show.lt = false; }
 

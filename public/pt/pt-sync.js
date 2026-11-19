@@ -76,7 +76,10 @@ export async function write(id, data) {
 
 // Listen to a doc in the pt collection. cb(data|null, via) on every change.
 // onState('live'|'polling'|'error') reports the connection type.
-export async function listen(id, cb, onState = () => {}, pollMs = 1000) {
+// opts.backup: keep REST polling running even while the live link works. Production
+// Truck's hidden output page can stall the live link without an error, so overlays
+// use this; callers must ignore older versions (both paths can deliver).
+export async function listen(id, cb, onState = () => {}, pollMs = 1000, opts = {}) {
   let gotSnap = false, polling = null, last = "";
   const startPolling = () => {
     if (polling) return;
@@ -103,6 +106,11 @@ export async function listen(id, cb, onState = () => {}, pollMs = 1000) {
     } catch (e) { startPolling(); }
     // Watchdog: if the live connection never delivers, fall back to polling.
     setTimeout(() => { if (!gotSnap) startPolling(); }, 6000);
+    if (opts.backup) setTimeout(() => {
+      if (polling) return;
+      const tick = async () => { try { const d = await restGet(id); const key = JSON.stringify(d); if (key !== last) { last = key; cb(d, "poll"); } } catch (e) {} };
+      polling = setInterval(tick, pollMs);
+    }, 1500);
   } else {
     startPolling();
   }

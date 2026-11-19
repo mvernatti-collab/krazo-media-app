@@ -88,14 +88,32 @@ export function fmtElapsed(ms) {
   return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 }
 
-export const pack = (s) => ({ json: JSON.stringify(s), v: s.v });
+export const pack = (s) => ({ json: JSON.stringify(s), v: s.v, sent: Date.now() });
 export const unpack = (d) => {
   if (!d || !d.json) return null;
   try { return JSON.parse(d.json); } catch { return null; }
 };
 
 export const other = (side) => (side === "h" ? "a" : "h");
-export const bandHex = (c) => (c === "green" ? "#16A34A" : c === "red" ? "#DC2626" : c);
+export const BANDS = { green: "#16A34A", red: "#DC2626", blue: "#1D4ED8", yellow: "#EAB308", orange: "#EA580C", purple: "#7C3AED", black: "#111111", white: "#F5F5F5" };
+export const bandHex = (c) => BANDS[c] || c || "#666";
+export const bandName = (c) => (BANDS[c] ? c : "team color");
+
+// Clock-skew correction: each write carries the writer's clock (sent). The lowest
+// (receiver now - sent) seen recently is the clock offset plus the fastest delivery,
+// so subtracting it lines the receiver's clock up with the scorer's.
+export function makeSkew() {
+  let best = null, at = 0;
+  return {
+    see(sent) {
+      if (!sent) return;
+      const off = Date.now() - sent, t = Date.now();
+      if (Math.abs(off) > 120000) return; // an old doc read at load time, not a live delivery
+      if (best === null || off < best || t - at > 60000) { best = off; at = t; }
+    },
+    now() { return Date.now() - (best === null ? 0 : best); },
+  };
+}
 
 // ---- Event model (Track-style) ----
 // Each tap is an event {k, s, p, c}: k = kind, s = side (scorer, or offender for

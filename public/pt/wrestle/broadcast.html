@@ -79,7 +79,8 @@ tr.cur td{background:#20202a}
 </main>
 <script type="module">
 import { listen } from "/pt/pt-sync.js";
-import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, defaultState, derive, bandHex } from "/pt/wrestle/core.js";
+import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, defaultState, derive, bandHex, bandName, makeSkew } from "/pt/wrestle/core.js";
+const SK = makeSkew();
 import { loadDuals, buildStats, rkey } from "/pt/wrestle/records.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -104,7 +105,7 @@ function wHtml(s) {
   const role = pos === "N" ? ["NEUTRAL", ""] : pos === s ? ["TOP", "top"] : ["BOTTOM", "bot"];
   const pens = [p.stall ? `${p.stall} stall${p.stall > 1 ? "s" : ""}` : "", p.pen ? `${p.pen} penalt${p.pen > 1 ? "ies" : "y"}` : "", p.caut ? `${p.caut} caution${p.caut > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
   return `<div class="role ${role[1]}">${role[0]}</div><div class="nm H">${esc(name || "Open")}</div>
-    <div class="tm"><span style="color:${bandHex(S.bands[s])}">■</span> ${esc(team(s).name)} · ${S.bands[s]}</div>
+    <div class="tm"><span style="color:${bandHex(S.bands[s])}">■</span> ${esc(team(s).name)} · ${bandName(S.bands[s])}</div>
     <div class="rec H">${x ? x.rec : "—"}</div><div class="facts">${facts(x)}</div>
     <div class="sc H">${S.m[s]}</div><div class="pen">${pens}</div>`;
 }
@@ -117,6 +118,8 @@ function paint() {
     `${left} bout${left > 1 ? "s" : ""} left · ${max} points still possible` + (lead ? ` · ${ahead} leads by ${Math.abs(lead)}` : " · tied");
   $("boutLbl").textContent = `Now wrestling · bout ${S.idx + 1} of ${W.length}` + (done[cur] ? ` · final: ${resTxt(done[cur])}` : "");
   $("wH").innerHTML = wHtml("h"); $("wA").innerHTML = wHtml("a");
+  $("wH").style.borderColor = bandHex(S.bands.h); $("wA").style.borderColor = bandHex(S.bands.a);
+  $("wH").style.order = S.flip ? 3 : 1; $("wA").style.order = S.flip ? 1 : 3; document.querySelector(".bout .c").style.order = 2;
   $("cWt").textContent = cur + " lbs";
   $("cPer").textContent = periodById(S.m.period).label;
   const d = derive(S.m.ev || []);
@@ -133,9 +136,9 @@ function paint() {
     return `<tr class="${w === cur ? "cur" : ""}"><td class="wt">${esc(w)}</td><td class="${b && b.w === "h" ? "win" : ""}">${esc(l.h || "Open")}</td><td class="${b && b.w === "a" ? "win" : ""}">${esc(l.a || "Open")}</td><td class="r">${b ? esc(resTxt(b)) + " · +" + b.tp + " " + esc(team(b.w).short) : ""}</td></tr>`; }).join("");
   tick();
 }
-function tick() { $("cClk").textContent = fmtClock(remaining(S.m)); $("cClk").classList.toggle("run", !!S.m.running); }
+function tick() { $("cClk").textContent = fmtClock(remaining(S.m, SK.now())); $("cClk").classList.toggle("run", !!S.m.running); }
 setInterval(tick, 100);
-listen(DOC, (d) => { const s = unpack(d); if (s) { S = s; paint(); } }, (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live" : st === "polling" ? "Backup link" : "No connection"; });
+listen(DOC, (d) => { if (d) SK.see(d.sent); const s = unpack(d); if (s && (s.v || 0) >= (S.v || 0)) { S = s; paint(); } }, (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live" : st === "polling" ? "Backup link" : "No connection"; }, 1000, { backup: true });
 const refresh = async () => { STATS = buildStats(await loadDuals().catch(() => [])); paint(); };
 refresh(); setInterval(refresh, 45000);
 paint();
