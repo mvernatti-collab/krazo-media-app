@@ -8,25 +8,28 @@
 <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
 <style>
 /* PT-safe: no CSS animations/transitions, no filters, no shadows, no rounded
-   corners, no partial opacity. Everything moves with script-driven transforms. */
+   corners, no partial opacity. Everything moves with script-driven transforms
+   inside overflow-hidden boxes. */
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
 body.bg{background:#3d5a2e}
 #stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden}
 .H{font-family:Anton,Impact,'Arial Narrow',sans-serif;text-transform:uppercase;font-weight:400;letter-spacing:.01em}
 .clipbox{position:absolute;overflow:hidden}
 .slide{position:absolute;left:0;top:0;right:0;bottom:0}
+img.lg{object-fit:contain;display:block}
+.R{background:#ED1C24}.K{background:#0d0d10}.K2{background:#17171c}.K3{background:#24242b}
 
 /* scorebug */
 #bugBox{left:60px;bottom:56px;width:780px;height:262px}
-#bug{background:#0d0d10;color:#fff}
-#bug .hdr{display:flex;height:52px;background:#E31B23}
+#bug{color:#fff}
+#bug .hdr{display:flex;height:52px}
 #bug .hdr div{display:flex;align-items:center;font-size:34px;padding:0 20px}
-#bug .hdr .wt{background:#0d0d10}
-#bug .hdr .per{margin-left:auto;background:#1b1b20}
+#bug .hdr .per{margin-left:auto}
 #bug .hdr .clk{width:150px;justify-content:center;background:#fff;color:#0d0d10;font-variant-numeric:tabular-nums}
 #bug .rowW{display:flex;height:76px;border-top:4px solid #0d0d10}
 #bug .band{width:16px}
 #bug .tm{width:120px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff}
+#bug .tm img{height:62px;width:100px}
 #bug .nm{flex:1;display:flex;align-items:center;padding:0 22px;font-size:42px;white-space:nowrap;overflow:hidden;background:#17171c}
 #bug .nm .top{display:inline-block;margin-left:14px;background:#fff;color:#0d0d10;font-size:22px;padding:2px 8px;line-height:1.1}
 #bug .pt{width:120px;display:flex;align-items:center;justify-content:center;font-size:62px;background:#0d0d10}
@@ -35,57 +38,126 @@ body.bg{background:#3d5a2e}
 #bug .ftr .ts{display:flex;align-items:center;gap:10px}
 #bug .ftr .sq{width:14px;height:30px}
 
-/* pop-up above the bug */
+/* small pop (escapes, penalties) */
 #popBox{left:60px;bottom:322px;width:780px;height:96px}
 #pop{display:flex;color:#fff}
 #pop .side{width:16px}
-#pop .txt{flex:1;display:flex;align-items:center;padding:0 24px;font-size:52px;background:#0d0d10}
-#pop .pts{width:150px;display:flex;align-items:center;justify-content:center;font-size:66px;background:#E31B23}
+#pop .txt{flex:1;display:flex;align-items:center;padding:0 24px;font-size:50px;background:#0d0d10}
+#pop .pts{width:150px;display:flex;align-items:center;justify-content:center;font-size:66px}
 
-/* result lower third */
+/* move stinger (takedown, reversal, near fall) */
+#mvBox{left:60px;bottom:322px;width:900px;height:140px}
+#mv .bg{position:absolute;left:0;top:0;width:900px;height:140px;background:#0d0d10;transform-origin:0 0}
+#mv .side{position:absolute;left:0;top:0;width:18px;height:140px}
+#mv .wipe{position:absolute;left:0;top:0;width:900px;height:140px;background:#ED1C24}
+#mv .lg{position:absolute;left:40px;top:20px;width:110px;height:100px}
+#mv .t{position:absolute;left:170px;top:8px;font-size:86px;line-height:1;color:#fff;white-space:nowrap}
+#mv .s{position:absolute;left:174px;top:100px;font-size:28px;color:#c9c9d0;white-space:nowrap;letter-spacing:.04em}
+#mv .p{position:absolute;right:0;top:0;width:190px;height:140px;display:flex;align-items:center;justify-content:center;font-size:104px;color:#fff;background:#ED1C24;transform-origin:50% 50%}
+
+/* pin / tech fall stinger */
+#stBox{left:0;top:360px;width:1920px;height:360px}
+#st .red{position:absolute;left:0;top:0;width:1920px;height:360px;background:#ED1C24}
+#st .dark{position:absolute;left:0;top:60px;width:1920px;height:240px;background:#0d0d10}
+#st .big{position:absolute;left:330px;top:44px;font-size:250px;line-height:1;color:#fff;white-space:nowrap;transform-origin:0 50%}
+#st .sub{position:absolute;left:340px;top:296px;font-size:44px;color:#fff;white-space:nowrap;letter-spacing:.06em}
+#st .lg{position:absolute;left:80px;top:70px;width:220px;height:220px}
+#st .bar{position:absolute;right:0;top:0;width:26px;height:240px;background:#fff}
+
+/* result lower third + custom lower third */
 #resBox{left:880px;bottom:56px;width:980px;height:262px}
-#ltBox{left:880px;bottom:56px;width:980px;height:150px}
-#lt{display:flex;background:#0d0d10;color:#fff}
-#lt .bar{width:22px;background:#E31B23}
-#lt .tx{flex:1;padding:16px 30px;display:flex;flex-direction:column;justify-content:center}
-#lt .t1{font-size:60px;line-height:1.05;white-space:nowrap;overflow:hidden}
-#lt .t2{font-size:30px;color:#c9c9d0;margin-top:4px;white-space:nowrap;overflow:hidden}
-#next .vs .r{font-size:34px;color:#ff4a51;margin-top:6px}
 #res{display:flex;color:#fff;background:#0d0d10}
-#res .tag{width:220px;background:#E31B23;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+#res .tag{width:220px;background:#ED1C24;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
 #res .tag .k{font-size:28px;letter-spacing:.12em}
 #res .tag .tp{font-size:96px;line-height:1}
 #res .tag .tl{font-size:22px;letter-spacing:.14em}
-#res .main{flex:1;padding:24px 34px;display:flex;flex-direction:column;justify-content:center}
-#res .ty{font-size:40px;color:#ff4a51}
+#res .main{flex:1;padding:24px 30px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+#res .ty{font-size:40px;color:#ff4a51;white-space:nowrap;overflow:hidden}
 #res .wn{font-size:72px;line-height:1.05;white-space:nowrap;overflow:hidden}
-#res .sub{font-size:30px;color:#c9c9d0;margin-top:6px}
+#res .sub{font-size:30px;color:#c9c9d0;margin-top:6px;white-space:nowrap;overflow:hidden}
+#res .lg{width:150px;height:150px;align-self:center;margin-right:30px}
+#ltBox{left:880px;bottom:56px;width:980px;height:150px}
+#lt{display:flex;background:#0d0d10;color:#fff}
+#lt .bar{width:22px;background:#ED1C24}
+#lt .tx{flex:1;padding:16px 30px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+#lt .t1{font-size:60px;line-height:1.05;white-space:nowrap;overflow:hidden}
+#lt .t2{font-size:30px;color:#c9c9d0;margin-top:4px;white-space:nowrap;overflow:hidden}
+
+/* dual score update (top center) */
+#tsBox{left:560px;top:40px;width:800px;height:150px}
+#ts{display:flex;flex-direction:column;color:#fff}
+#ts .lab{height:36px;background:#ED1C24;display:flex;align-items:center;justify-content:center;font-size:26px;letter-spacing:.2em}
+#ts .row{flex:1;display:flex;background:#0d0d10}
+#ts .row img{width:110px;height:94px;margin:10px 16px}
+#ts .row .n{flex:1;display:flex;align-items:center;font-size:44px;white-space:nowrap;overflow:hidden}
+#ts .row .sc{width:120px;display:flex;align-items:center;justify-content:center;font-size:78px;font-variant-numeric:tabular-nums}
+#ts .row .dash{width:30px;display:flex;align-items:center;justify-content:center;font-size:50px;color:#666}
+
+/* sponsor bug (top right) */
+#spBox{right:50px;top:40px;width:380px;height:150px}
+#sp .lab{height:36px;background:#ED1C24;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;letter-spacing:.22em}
+#sp .win{position:absolute;left:0;top:36px;width:380px;height:114px;background:#fff;overflow:hidden}
+#sp .in{position:absolute;left:0;top:0;width:380px;height:114px;display:flex;align-items:center;justify-content:center}
+#sp .in img{max-width:330px;max-height:94px}
+#sp .in span{font-size:44px;color:#0d0d10}
 
 /* center cards */
 #cardBox{left:360px;top:110px;width:1200px;height:860px}
 .card{background:#0d0d10;color:#fff;bottom:auto}
-.card .hd{height:84px;background:#E31B23;display:flex;align-items:center;justify-content:space-between;padding:0 34px;font-size:46px}
+.card .hd{height:84px;background:#ED1C24;display:flex;align-items:center;justify-content:space-between;padding:0 34px;font-size:46px}
 .card .hd small{font-size:28px;letter-spacing:.14em}
-#next .vs{display:flex;height:300px}
+#next .vs{display:flex;height:320px}
 #next .vs > div{flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 40px}
+#next .vs .lg{width:120px;height:100px;margin-bottom:10px}
 #next .vs .t{font-size:34px;letter-spacing:.1em}
 #next .vs .n{font-size:84px;line-height:1.05}
+#next .vs .r{font-size:34px;color:#ff4a51;margin-top:6px}
 #next .vs .mid{flex:0 0 120px;align-items:center;font-size:64px;background:#17171c}
 #dual table{width:100%;border-collapse:collapse}
 #dual td{height:40px;font-size:28px;padding:0 18px;border-bottom:3px solid #0d0d10;background:#17171c}
 #dual td.w{background:#24242b}
 #dual td.wt{width:110px;background:#0d0d10;color:#ff4a51}
 #dual td.tp{width:110px;text-align:center}
-#dual .tot{display:flex;height:84px;align-items:center;justify-content:center;gap:40px;font-size:56px;background:#24242b}
+#dual .tot{display:flex;height:84px;align-items:center;justify-content:center;gap:30px;font-size:56px;background:#24242b}
+#dual .tot img{width:80px;height:66px}
+#brk .rw{display:flex;height:120px;border-top:4px solid #0d0d10;background:#17171c}
+#brk .rw .band{width:20px}
+#brk .rw img{width:130px;height:96px;margin:12px 0 12px 20px}
+#brk .rw .nm{flex:1;padding-left:24px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+#brk .rw .nm b{font-weight:400;font-size:58px;line-height:1;white-space:nowrap;overflow:hidden}
+#brk .rw .nm span{font-size:26px;color:#b9b9c2;letter-spacing:.08em}
+#brk .rw .sc{width:170px;display:flex;align-items:center;justify-content:center;font-size:96px;background:#0d0d10}
+#brk .ft{height:64px;display:flex;align-items:center;justify-content:center;font-size:32px;background:#24242b;letter-spacing:.04em}
+
+/* big cards: opening + final */
+#bigBox{left:160px;top:90px;width:1600px;height:900px}
+.big{background:#0d0d10;color:#fff;bottom:auto}
+.big .hd{height:100px;background:#ED1C24;display:flex;align-items:center;justify-content:center;gap:30px;font-size:64px;letter-spacing:.08em}
+.big .hd small{font-size:30px;letter-spacing:.2em}
+.big .body{display:flex;height:560px}
+.big .tm{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-width:0;padding:0 20px}
+.big .tm img{width:340px;height:300px}
+.big .tm .n{font-size:84px;line-height:1;white-space:nowrap}
+.big .tm .r{font-size:36px;color:#ff4a51;letter-spacing:.06em}
+.big .tm .sc{font-size:170px;line-height:.9}
+.big .ph{width:300px;height:240px;display:flex;align-items:center;justify-content:center;font-size:110px;color:#fff}
+#fin .ph{width:220px;height:160px;font-size:80px}
+.big .mid{flex:0 0 200px;display:flex;align-items:center;justify-content:center;font-size:96px;background:#17171c}
+.big .ft{height:110px;display:flex;align-items:center;justify-content:center;gap:24px;font-size:34px;background:#17171c;letter-spacing:.06em}
+.big .ft img{height:76px;width:auto}
+.big .win{height:90px;display:flex;align-items:center;justify-content:center;font-size:58px;letter-spacing:.1em}
 
 #dbg{position:absolute;left:8px;top:8px;background:#000;color:#7CFC9A;font:14px Menlo,monospace;padding:6px 10px;white-space:pre;z-index:9}
 </style>
 </head>
 <body>
 <div id="stage">
+  <div class="clipbox" id="spBox"><div class="slide" id="sp"><div class="lab H">Presented by</div><div class="win"><div class="in" id="spIn"><img id="spImg" alt=""><span class="H" id="spTx"></span></div></div></div></div>
+  <div class="clipbox" id="tsBox"><div class="slide" id="ts"><div class="lab H">Dual score</div><div class="row H"><img class="lg" id="tsLh" alt=""><div class="n" id="tsNh"></div><div class="sc" id="tsSh"></div><div class="dash">–</div><div class="sc" id="tsSa"></div><div class="n" id="tsNa" style="justify-content:flex-end"></div><img class="lg" id="tsLa" alt=""></div></div></div>
   <div class="clipbox" id="popBox"><div class="slide" id="pop"><div class="side"></div><div class="txt H"></div><div class="pts H"></div></div></div>
+  <div class="clipbox" id="mvBox"><div class="slide" id="mv"><div class="bg"></div><div class="side"></div><img class="lg" id="mvL" alt=""><div class="t H" id="mvT"></div><div class="s H" id="mvS"></div><div class="p H" id="mvP"></div><div class="wipe"></div></div></div>
   <div class="clipbox" id="bugBox"><div class="slide" id="bug">
-    <div class="hdr H"><div class="wt" id="bWt">106 LBS</div><div class="per" id="bPer">P1</div><div class="clk" id="bClk">2:00</div></div>
+    <div class="hdr H"><div class="wt K" id="bWt">106 LBS</div><div class="R" style="flex:1;padding:0"></div><div class="per K2" id="bPer">P1</div><div class="clk" id="bClk">2:00</div></div>
     <div class="rowW" id="rowH"><div class="band"></div><div class="tm H"></div><div class="nm H"></div><div class="pt H"></div></div>
     <div class="rowW" id="rowA"><div class="band"></div><div class="tm H"></div><div class="nm H"></div><div class="pt H"></div></div>
     <div class="ftr H"><span class="lab">DUAL</span><span class="ts" id="fH"></span><span class="ts" id="fA"></span></div>
@@ -94,17 +166,32 @@ body.bg{background:#3d5a2e}
   <div class="clipbox" id="resBox"><div class="slide" id="res">
     <div class="tag H"><div class="k">RESULT</div><div class="tp" id="rTp">+6</div><div class="tl">TEAM PTS</div></div>
     <div class="main"><div class="ty H" id="rTy"></div><div class="wn H" id="rWn"></div><div class="sub H" id="rSub"></div></div>
+    <img class="lg" id="rL" alt="">
   </div></div>
+  <div class="clipbox" id="stBox"><div class="slide" id="st"><div class="red"></div><div class="dark"><div class="bar"></div></div><img class="lg" id="stL" alt=""><div class="big H" id="stT">FALL</div><div class="sub H" id="stS"></div></div></div>
   <div class="clipbox" id="cardBox">
     <div class="slide card" id="next"><div class="hd H"><span>Up next</span><small id="nWt"></small></div>
-      <div class="vs H"><div id="nH"><div class="t"></div><div class="n"></div><div class="r"></div></div><div class="mid">VS</div><div id="nA" style="text-align:right"><div class="t"></div><div class="n"></div><div class="r"></div></div></div></div>
+      <div class="vs H"><div id="nH"><img class="lg" alt=""><div class="t"></div><div class="n"></div><div class="r"></div></div><div class="mid">VS</div><div id="nA" style="text-align:right;align-items:flex-end"><img class="lg" alt=""><div class="t"></div><div class="n"></div><div class="r"></div></div></div></div>
     <div class="slide card" id="dual"><div class="hd H"><span>Dual summary</span><small id="dTitle"></small></div><table id="dTbl"></table><div class="tot H" id="dTot"></div></div>
+    <div class="slide card" id="brk"><div class="hd H"><span id="kT">End of period 1</span><small id="kWt"></small></div>
+      <div class="rw" id="kH"><div class="band"></div><img class="lg" alt=""><div class="nm H"><b></b><span></span></div><div class="sc H"></div></div>
+      <div class="rw" id="kA"><div class="band"></div><img class="lg" alt=""><div class="nm H"><b></b><span></span></div><div class="sc H"></div></div>
+      <div class="ft H" id="kF"></div></div>
+  </div>
+  <div class="clipbox" id="bigBox">
+    <div class="slide big" id="open"><div class="hd H"><span>Tonight</span><small id="oSub">Dual</small></div>
+      <div class="body H"><div class="tm"><div class="ph" id="oLhP"></div><img class="lg" id="oLh" alt=""><div class="n" id="oNh"></div><div class="r" id="oRh"></div></div><div class="mid">VS</div><div class="tm"><div class="ph" id="oLaP"></div><img class="lg" id="oLa" alt=""><div class="n" id="oNa"></div><div class="r" id="oRa"></div></div></div>
+      <div class="ft H"><img src="/pt/krazo.png" alt="Krazo Media"><span id="oFt">A Krazo Media broadcast</span></div></div>
+    <div class="slide big" id="fin"><div class="hd H"><span>Final</span><small id="fSub">Dual</small></div>
+      <div class="body H" style="height:480px"><div class="tm"><div class="ph" id="fLhP"></div><img class="lg" id="fLh" alt="" style="height:160px"><div class="n" id="fNh"></div><div class="sc" id="fSh"></div></div><div class="mid">–</div><div class="tm"><div class="ph" id="fLaP"></div><img class="lg" id="fLa" alt="" style="height:160px"><div class="n" id="fNa"></div><div class="sc" id="fSa"></div></div></div>
+      <div class="win H" id="fWin"></div>
+      <div class="ft H" id="fFt"></div></div>
   </div>
 </div>
 <script type="module">
 import { listen, write } from "/pt/pt-sync.js";
-import { GFX, blankGfx } from "/pt/wrestle/records.js";
 import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, bandHex, defaultState } from "/pt/wrestle/core.js";
+import { GFX, blankGfx, logoSrc, crestSrc } from "/pt/wrestle/records.js";
 
 const QS = new URLSearchParams(location.search);
 if (QS.has("bg")) document.body.classList.add("bg");
@@ -113,20 +200,33 @@ const stage = $("stage");
 const fit = () => { stage.style.transform = `scale(${Math.min(innerWidth / 1920, innerHeight / 1080) || 1})`; };
 addEventListener("resize", fit); fit();
 
-// optional bug position: pos=bl (default) | br | tl | tr
 const pos = QS.get("pos") || "bl";
-if (pos.includes("r")) { $("bugBox").style.left = "auto"; $("bugBox").style.right = "60px"; $("popBox").style.left = "auto"; $("popBox").style.right = "60px"; $("resBox").style.left = "60px"; }
-if (pos.includes("t")) { $("bugBox").style.bottom = "auto"; $("bugBox").style.top = "56px"; $("popBox").style.bottom = "auto"; $("popBox").style.top = "322px"; }
+if (pos.includes("r")) { for (const id of ["bugBox", "popBox", "mvBox"]) { $(id).style.left = "auto"; $(id).style.right = "60px"; } $("resBox").style.left = "60px"; $("ltBox").style.left = "60px"; }
+if (pos.includes("t")) { $("bugBox").style.bottom = "auto"; $("bugBox").style.top = "56px"; for (const id of ["popBox", "mvBox"]) { $(id).style.bottom = "auto"; $(id).style.top = "330px"; } $("tsBox").style.top = "auto"; $("tsBox").style.bottom = "40px"; }
 
 const dbg = QS.has("debug") ? Object.assign(document.body.appendChild(document.createElement("div")), { id: "dbg" }) : null;
 let link = "connecting";
-let S = defaultState(), base = null, popUntil = 0, resUntil = 0, frames = 0;
-const vis = { bug: 0, pop: 0, res: 0, next: 0, dual: 0, lt: 0 };
-let G = blankGfx();
+let S = defaultState(), G = blankGfx(), base = null, frames = 0;
+const vis = { bug: 0, pop: 0, res: 0, next: 0, dual: 0, lt: 0, brk: 0, open: 0, fin: 0, spon: 0, ts: 0 };
+const T = { pop: 0, mv: 0, st: 0, resA: 0, resB: 0, tsA: 0, tsB: 0 };   // animation timers (Date.now ms)
+let tsFrom = { h: 0, a: 0 }, tsWin = null;
+const L = { h: "", a: "", hc: "", ac: "" }; let logoKey = "";
+let SP = [], spIdx = -1;
 
-function esc(s) { return String(s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
-function teamOf(side) { return side === "h" ? S.home : S.away; }
-function name(side, n) { const nm = (n || {})[side]; return nm || teamOf(side).name; }
+const esc = (s) => String(s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const teamOf = (s) => (s === "h" ? S.home : S.away);
+const name = (s, n) => (n || {})[s] || teamOf(s).name;
+const clamp = (x) => Math.max(0, Math.min(1, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const back = (x) => { x = clamp(x); const c = 1.9; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); }; // overshoot
+const setImg = (el, src) => { if (el.getAttribute("src") !== src) { if (src) el.setAttribute("src", src); else el.removeAttribute("src"); } el.style.display = src ? "block" : "none"; };
+
+async function resolveLogos() {
+  const k = JSON.stringify([S.home.name, S.home.logo, S.away.name, S.away.logo]);
+  if (k === logoKey) return; logoKey = k;
+  [L.h, L.a, L.hc, L.ac] = await Promise.all([logoSrc(S.home), logoSrc(S.away), crestSrc(S.home), crestSrc(S.away)]);
+  paintStatic();
+}
 
 function paintStatic() {
   const lu = S.lineup[S.weights[S.idx]] || {};
@@ -134,75 +234,180 @@ function paintStatic() {
   for (const s of ["h", "a"]) {
     const r = $(s === "h" ? "rowH" : "rowA"), t = teamOf(s);
     r.children[0].style.background = bandHex(S.bands[s]);
-    r.children[1].style.background = t.color; r.children[1].textContent = t.short;
+    r.children[1].style.background = t.color;
+    r.children[1].innerHTML = L[s] ? `<img class="lg" src="${L[s]}" alt="">` : esc(t.short);
     r.children[2].innerHTML = esc(name(s, lu)) + (S.m.pos === s ? ' <span class="top">TOP</span>' : "");
     r.children[3].textContent = S.m[s];
   }
   $("fH").innerHTML = `<span class="sq" style="background:${S.home.color}"></span>${esc(S.home.short)} ${S.team.h}`;
   $("fA").innerHTML = `<span class="sq" style="background:${S.away.color}"></span>${esc(S.away.short)} ${S.team.a}`;
-  // up next = the current bout's lineup (shown between bouts)
+  // up next
   $("nWt").textContent = (S.weights[S.idx] || "") + " LBS";
-  $("nH").children[0].textContent = S.home.name; $("nH").children[1].textContent = name("h", lu);
-  $("nA").children[0].textContent = S.away.name; $("nA").children[1].textContent = name("a", lu);
   const rc = G.rec && G.rec.wt === S.weights[S.idx] ? G.rec : { h: "", a: "" };
-  $("nH").children[2].textContent = rc.h ? rc.h + " this season" : ""; $("nA").children[2].textContent = rc.a ? rc.a + " this season" : "";
-  $("lt1").textContent = G.lt.title || ""; $("lt2").textContent = G.lt.sub || "";
+  for (const s of ["h", "a"]) {
+    const el = $(s === "h" ? "nH" : "nA");
+    setImg(el.children[0], L[s]); el.children[1].textContent = teamOf(s).name; el.children[2].textContent = name(s, lu);
+    el.children[3].textContent = rc[s] ? rc[s] + " this season" : "";
+  }
+  // dual summary
   $("dTitle").textContent = `${S.home.short} vs ${S.away.short}`;
   const done = {}; S.bouts.forEach((b) => (done[b.wt] = b));
   $("dTbl").innerHTML = S.weights.map((w) => { const b = done[w], l = S.lineup[w] || {};
     return `<tr class="H"><td class="wt">${esc(w)}</td><td class="${b && b.w === "h" ? "w" : ""}">${esc(l.h || "—")}</td><td class="${b && b.w === "a" ? "w" : ""}">${esc(l.a || "—")}</td><td>${b ? RESULTS[b.type].label + (b.type === "FALL" ? " " + b.time : b.score ? " " + b.score : "") : ""}</td><td class="tp">${b ? "+" + b.tp + " " + esc(teamOf(b.w).short) : ""}</td></tr>`; }).join("");
-  $("dTot").innerHTML = `<span style="color:${S.home.color}">■</span>${esc(S.home.name)} ${S.team.h} <span style="color:#777">–</span> ${S.team.a} ${esc(S.away.name)}<span style="color:${S.away.color}">■</span>`;
+  $("dTot").innerHTML = `${L.h ? `<img class="lg" src="${L.h}" alt="">` : ""}${esc(S.home.name)} ${S.team.h} <span style="color:#777">–</span> ${S.team.a} ${esc(S.away.name)}${L.a ? `<img class="lg" src="${L.a}" alt="">` : ""}`;
+  // period break
+  const per = periodById(S.m.period);
+  $("kT").textContent = per.id.length === 1 ? "End of period " + per.id : "End of " + per.label;
+  $("kWt").textContent = (S.weights[S.idx] || "") + " LBS";
+  for (const s of ["h", "a"]) {
+    const el = $(s === "h" ? "kH" : "kA");
+    el.children[0].style.background = bandHex(S.bands[s]); setImg(el.children[1], L[s]);
+    el.children[2].children[0].textContent = name(s, lu); el.children[2].children[1].textContent = teamOf(s).name;
+    el.children[3].textContent = S.m[s];
+  }
+  $("kF").textContent = `Dual: ${S.home.short} ${S.team.h} – ${S.team.a} ${S.away.short}`;
+  // opening + final
+  for (const [id, src, s] of [["oLh", L.hc, "h"], ["oLa", L.ac, "a"], ["fLh", L.hc, "h"], ["fLa", L.ac, "a"]]) {
+    setImg($(id), src); const ph = $(id + "P");
+    ph.style.display = src ? "none" : "flex"; ph.style.background = teamOf(s).color; ph.textContent = teamOf(s).short;
+  }
+  $("oNh").textContent = S.home.name; $("oNa").textContent = S.away.name;
+  $("oRh").textContent = G.open && G.open.h ? G.open.h + " in duals" : ""; $("oRa").textContent = G.open && G.open.a ? G.open.a + " in duals" : "";
+  const dt = S.date ? new Date(S.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) : "";
+  $("oSub").textContent = (S.division === "girls" ? "Girls dual" : "Dual") + (dt ? " · " + dt : "");
+  $("oFt").textContent = `Live from ${S.home.name} · A Krazo Media broadcast`;
+  $("fNh").textContent = S.home.name; $("fNa").textContent = S.away.name; $("fSh").textContent = S.team.h; $("fSa").textContent = S.team.a;
+  $("fSub").textContent = S.division === "girls" ? "Girls dual" : "Dual";
+  const fw = S.team.h > S.team.a ? "h" : S.team.a > S.team.h ? "a" : null;
+  $("fWin").textContent = fw ? teamOf(fw).name + " wins" : "Dual tied";
+  $("fWin").style.background = fw ? teamOf(fw).color : "#24242b";
+  const won = { h: 0, a: 0 }, pins = { h: 0, a: 0 }; S.bouts.forEach((b) => { won[b.w]++; if (b.type === "FALL") pins[b.w]++; });
+  $("fFt").innerHTML = `<img src="/pt/krazo.png" alt="">Bouts won ${won.h}–${won.a} · Pins ${pins.h}–${pins.a}`;
+  // team score bug
+  setImg($("tsLh"), L.h); setImg($("tsLa"), L.a);
+  $("tsNh").textContent = S.home.short; $("tsNa").textContent = S.away.short;
+  $("lt1").textContent = G.lt.title || ""; $("lt2").textContent = G.lt.sub || "";
 }
 
 function onState(s) {
   if (!s) return;
   const first = base === null;
   S = s;
-  if (first) { base = { pop: s.pop.n || 0, res: s.res.n || 0 }; }
+  if (first) base = { pop: s.pop.n || 0, res: s.res.n || 0 };
   else {
     if ((s.pop.n || 0) > base.pop) { base.pop = s.pop.n; showPop(s.pop); }
     if ((s.res.n || 0) > base.res) { base.res = s.res.n; showRes(s.res); }
   }
-  paintStatic();
-}
-function showPop(p) {
-  const t = teamOf(p.side);
-  $("pop").children[0].style.background = bandHex(S.bands[p.side]);
-  $("pop").children[1].textContent = p.text + " · " + t.short;
-  $("pop").children[2].textContent = p.pts ? "+" + p.pts : "!";
-  $("pop").children[2].style.background = p.pts ? "#E31B23" : "#24242b";
-  vis.pop = 0; popUntil = Date.now() + 3200;
-}
-function showRes(r) {
-  $("rTp").textContent = "+" + r.tp;
-  $("rTy").textContent = RESULTS[r.type].label + (r.type === "FALL" ? " · " + r.time : r.score ? " · " + r.score : "") + " · " + r.wt + " lbs";
-  $("rWn").textContent = (r.w === "h" ? r.hn : r.an) || teamOf(r.w).name;
-  $("rSub").textContent = `${teamOf(r.w).name} · Dual: ${S.home.short} ${S.team.h} – ${S.team.a} ${S.away.short}`;
-  vis.res = 0; resUntil = Date.now() + 8000;
+  paintStatic(); resolveLogos();
 }
 
-// Script-driven slide-in/out (keeps working in PT's hidden output page).
-function approach(k, target, dt) { const sp = dt / 320; vis[k] = target ? Math.min(1, vis[k] + sp) : Math.max(0, vis[k] - sp); }
-const ease = (x) => 1 - Math.pow(1 - x, 3);
+const BIG = { TD: "Takedown", R: "Reversal", NF2: "Near fall", NF3: "Near fall", NF4: "Near fall" };
+function showPop(p) {
+  const t = teamOf(p.side), now = Date.now();
+  if (BIG[p.k]) {
+    const lu = S.lineup[p.wt] || {};
+    $("mv").children[1].style.background = bandHex(S.bands[p.side]);
+    setImg($("mvL"), L[p.side]);
+    $("mvT").textContent = BIG[p.k]; $("mvS").textContent = `${name(p.side, lu)} · ${t.name}`;
+    $("mvP").textContent = "+" + p.pts;
+    const lx = L[p.side] ? 0 : -130; $("mvT").style.left = 170 + lx + "px"; $("mvS").style.left = 174 + lx + "px";
+    T.mv = now; T.pop = 0; vis.pop = 0;
+  } else {
+    $("pop").children[0].style.background = bandHex(S.bands[p.side]);
+    $("pop").children[1].textContent = p.text + " · " + t.short;
+    $("pop").children[2].textContent = p.pts ? "+" + p.pts : "!";
+    $("pop").children[2].style.background = p.pts ? "#ED1C24" : "#24242b";
+    vis.pop = 0; T.pop = now + 3200; T.mv = 0;
+  }
+}
+function showRes(r) {
+  const now = Date.now(), big = r.type === "FALL" || r.type === "TF";
+  const wn = (r.w === "h" ? r.hn : r.an) || teamOf(r.w).name;
+  $("rTp").textContent = "+" + r.tp;
+  $("rTy").textContent = RESULTS[r.type].label + (r.type === "FALL" ? " · " + r.time : r.score ? " · " + r.score : "") + " · " + r.wt + " lbs";
+  $("rWn").textContent = wn;
+  $("rSub").textContent = `${teamOf(r.w).name} · +${r.tp} team points`;
+  setImg($("rL"), L[r.w]);
+  if (big) {
+    $("stT").textContent = r.type === "FALL" ? "Fall!" : "Tech fall!";
+    $("stS").textContent = `${wn} · ${r.type === "FALL" ? r.time : r.score} · +${r.tp} ${teamOf(r.w).name}`;
+    $("st").children[0].style.background = teamOf(r.w).color || "#ED1C24";
+    setImg($("stL"), L[r.w]);
+    const lx = L[r.w] ? 0 : -250; $("stT").style.left = 330 + lx + "px"; $("stS").style.left = 340 + lx + "px";
+    T.st = now; T.mv = 0;
+  }
+  const start = now + (big ? 3300 : 0);
+  T.resA = start; T.resB = start + 8000;
+  tsFrom = { h: S.team.h - (r.w === "h" ? r.tp : 0), a: S.team.a - (r.w === "a" ? r.tp : 0) };
+  tsWin = r.w; T.tsA = start + 300; T.tsB = start + 7600;
+  vis.res = 0; vis.ts = 0;
+}
+
+function approach(k, target, dt, ms = 320) { const sp = dt / ms; vis[k] = target ? Math.min(1, vis[k] + sp) : Math.max(0, vis[k] - sp); }
+const Y = (id, v, dist) => { $(id).style.transform = `translateY(${(1 - ease(v)) * dist}px)`; };
 let last = performance.now();
 function step() {
-  const now = performance.now(), dt = Math.min(100, now - last); last = now; frames++;
-  const sh = G.show, card = sh.next || sh.dual;
-  approach("bug", sh.bug && !card, dt);
-  approach("pop", Date.now() < popUntil && sh.bug && !card, dt);
-  approach("lt", sh.lt && !card && !(Date.now() < resUntil), dt);
-  approach("res", Date.now() < resUntil && !card, dt);
-  approach("next", sh.next, dt);
-  approach("dual", sh.dual, dt);
-  $("lt").style.transform = `translateY(${(1 - ease(vis.lt)) * 160}px)`;
+  const pnow = performance.now(), dt = Math.min(100, pnow - last); last = pnow; frames++;
+  const now = Date.now(), sh = G.show;
+  const card = sh.next || sh.dual || sh.brk, bigc = sh.open || sh.fin, anyCard = card || bigc;
+  const stOn = T.st && now - T.st < 3400;
+  const resOn = now >= T.resA && now < T.resB;
+  approach("bug", sh.bug && !anyCard, dt);
+  approach("pop", now < T.pop && sh.bug && !anyCard, dt);
+  approach("res", resOn && !anyCard, dt);
+  approach("ts", now >= T.tsA && now < T.tsB && !anyCard, dt, 380);
+  approach("lt", sh.lt && !anyCard && !resOn && !stOn, dt);
+  approach("spon", sh.spon && SP.length && !bigc, dt, 420);
+  for (const k of ["next", "dual", "brk", "open", "fin"]) approach(k, sh[k], dt, 420);
   const fromBottom = !pos.includes("t");
-  $("bug").style.transform = `translateY(${(1 - ease(vis.bug)) * (fromBottom ? 270 : -270)}px)`;
-  $("pop").style.transform = `translateY(${(1 - ease(vis.pop)) * (fromBottom ? 100 : -100)}px)`;
-  $("res").style.transform = `translateY(${(1 - ease(vis.res)) * 270}px)`;
-  $("next").style.transform = `translateY(${(1 - ease(vis.next)) * 880}px)`;
-  $("dual").style.transform = `translateY(${(1 - ease(vis.dual)) * 880}px)`;
-  $("next").style.visibility = vis.next > 0 ? "visible" : "hidden";
-  $("dual").style.visibility = vis.dual > 0 ? "visible" : "hidden";
+  Y("bug", vis.bug, fromBottom ? 270 : -270);
+  Y("pop", vis.pop, fromBottom ? 100 : -100);
+  Y("res", vis.res, 270); Y("lt", vis.lt, 160);
+  Y("ts", vis.ts, pos.includes("t") ? 160 : -160);
+  Y("sp", vis.spon, -160);
+  for (const k of ["next", "dual", "brk"]) { Y(k, vis[k], 880); $(k).style.visibility = vis[k] > 0 ? "visible" : "hidden"; }
+  for (const k of ["open", "fin"]) { Y(k, vis[k], 920); $(k).style.visibility = vis[k] > 0 ? "visible" : "hidden"; }
+
+  // move stinger: dark bar grows, red wipe sweeps across, text slides in, points pop, then it drops out
+  const tm = T.mv ? now - T.mv : 1e9;
+  const mvOn = tm < 3300 && sh.bug && !anyCard;
+  $("mvBox").style.visibility = mvOn ? "visible" : "hidden";
+  if (mvOn) {
+    $("mv").children[0].style.transform = `scaleX(${ease(tm / 260)})`;
+    $("mv").children[6].style.transform = `translateX(${(-1 + 2 * ease(tm / 520)) * 900}px)`;
+    $("mvL").style.transform = `translateX(${(1 - ease((tm - 220) / 300)) * -200}px)`;
+    $("mvT").style.transform = `translateX(${(1 - ease((tm - 180) / 340)) * -700}px)`;
+    $("mvS").style.transform = `translateX(${(1 - ease((tm - 300) / 340)) * -700}px)`;
+    $("mvP").style.transform = `scale(${tm < 320 ? 0 : Math.max(0, back((tm - 320) / 380))})`;
+    $("mv").style.transform = `translateY(${ease((tm - 2900) / 380) * 150 * (fromBottom ? 1 : -1)}px)`;
+  }
+  // pin / tech fall stinger
+  const ts = T.st ? now - T.st : 1e9;
+  $("stBox").style.visibility = ts < 3400 ? "visible" : "hidden";
+  if (ts < 3400) {
+    const out = ease((ts - 2950) / 420) * 1920;
+    $("st").children[0].style.transform = `translateX(${(1 - ease(ts / 360)) * -1920 + out}px)`;
+    $("st").children[1].style.transform = `translateX(${(1 - ease((ts - 140) / 380)) * 1920 + out}px)`;
+    $("stT").style.transform = `translateX(${(1 - ease((ts - 320) / 360)) * -1400 + out}px) scale(${ts < 320 ? 0.6 : 0.6 + 0.4 * back((ts - 320) / 420)})`;
+    $("stS").style.transform = `translateX(${(1 - ease((ts - 520) / 360)) * -1800 + out}px)`;
+    $("stL").style.transform = `translateX(${(1 - ease((ts - 420) / 360)) * -500 + out}px)`;
+  }
+  // dual score count-up
+  if (vis.ts > 0) {
+    const k = ease((now - T.tsA - 700) / 900);
+    $("tsSh").textContent = Math.round(tsFrom.h + (S.team.h - tsFrom.h) * k);
+    $("tsSa").textContent = Math.round(tsFrom.a + (S.team.a - tsFrom.a) * k);
+    const flash = now - T.tsA > 700 && now - T.tsA < 2200;
+    $("tsSh").style.background = flash && tsWin === "h" ? "#ED1C24" : "transparent";
+    $("tsSa").style.background = flash && tsWin === "a" ? "#ED1C24" : "transparent";
+  }
+  // sponsor rotation (8 s each)
+  if (SP.length && vis.spon > 0) {
+    const cyc = 8000, i = Math.floor(now / cyc) % SP.length, t = now % cyc;
+    if (i !== spIdx) { spIdx = i; const x = SP[i]; setImg($("spImg"), x.img || ""); $("spTx").textContent = x.img ? "" : x.name || ""; }
+    const y = SP.length < 2 ? 0 : t < 350 ? (1 - ease(t / 350)) * 120 : t > cyc - 350 ? -ease((t - cyc + 350) / 350) * 120 : 0;
+    $("spIn").style.transform = `translateY(${y}px)`;
+  }
   $("bPer").textContent = periodById(S.m.period).label;
   $("bClk").textContent = fmtClock(remaining(S.m));
   if (dbg) dbg.textContent = `wrestle overlay · ${link} · v${S.v} · frames ${frames} · page ${document.visibilityState}`;
@@ -210,18 +415,23 @@ function step() {
 (function raf() { step(); requestAnimationFrame(raf); })();
 setInterval(step, 33);
 
+function setG(g) { const b = blankGfx(); G = { ...b, ...g, show: { ...b.show, ...(g.show || {}) }, lt: { ...b.lt, ...(g.lt || {}) }, open: { ...b.open, ...(g.open || {}) } }; paintStatic(); }
 if (QS.has("demo")) {
-  // ?demo=1 renders sample data locally (no connection), for previews.
+  // ?demo=<card list> previews with sample data, e.g. ?demo=open or ?demo=td or ?demo=fall
   const d = defaultState();
-  d.home = { name: "Ozark", short: "OZK", color: "#E31B23" }; d.away = { name: "Nixa", short: "NIX", color: "#1F4FA0" };
-  d.lineup["144"] = { h: "Jake Miller", a: "Tyler Brooks" }; d.idx = d.weights.indexOf("144");
-  d.team = { h: 18, a: 12 }; d.m.h = 7; d.m.a = 3; d.m.period = "2"; d.m.clockMs = 83000; d.v = 1;
+  d.home = { name: "Ozark", short: "OZK", color: "#ED1C24" }; d.away = { name: "Nixa", short: "NIX", color: "#1F4FA0" };
+  d.lineup["144"] = { h: "Jake Miller", a: "Tyler Brooks" }; d.idx = d.weights.indexOf("144"); d.date = "2026-12-03";
+  d.team = { h: 18, a: 12 }; d.m.h = 7; d.m.a = 3; d.m.period = "2"; d.m.clockMs = 83000; d.m.pos = "h"; d.v = 1;
   d.bouts = [{ wt: "106", w: "h", type: "FALL", tp: 6, time: "1:42", hn: "", an: "" }];
-  G.show = { ...G.show, ...d.show }; G.rec = { wt: "144", h: "14-2", a: "11-6" };
-  onState(d);
+  const want = (QS.get("demo") || "").split(",");
+  onState(d); setG({ show: { bug: true, ...Object.fromEntries(want.map((k) => [k, true])) }, rec: { wt: "144", h: "14-2", a: "11-6" }, open: { h: "6-1", a: "4-3" }, lt: { title: "Jake Miller", sub: "Ozark · 144 lbs · 14-2" } });
+  if (want.includes("spon")) SP = [{ name: "Your sponsor" }];
+  if (want.includes("td")) setTimeout(() => showPop({ side: "h", k: "TD", pts: 3, wt: "144", text: "TAKEDOWN" }), 300);
+  if (want.includes("fall")) setTimeout(() => showRes({ w: "h", type: "FALL", tp: 6, time: "1:42", wt: "144", hn: "Jake Miller" }), 300);
 } else {
   listen(DOC, (d) => onState(unpack(d)), (st) => { link = st; });
-  listen(GFX, (d) => { const g = unpack(d); if (!g) return; const b = blankGfx(); G = { ...b, ...g, show: { ...b.show, ...(g.show || {}) }, lt: { ...b.lt, ...(g.lt || {}) } }; paintStatic(); });
+  listen(GFX, (d) => { const g = unpack(d); if (g) setG(g); });
+  listen("wrestle-sponsors", (d) => { const x = unpack(d); SP = (x && x.list) || []; spIdx = -1; }, () => {}, 5000);
   const beat = () => write("wrestle-status", { alive: Date.now(), v: S.v }).catch(() => {});
   if (!QS.has("preview")) { setTimeout(beat, 1500); setInterval(beat, 5000); } // previews never claim to be the PT overlay
 }
