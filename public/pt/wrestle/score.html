@@ -384,7 +384,7 @@ function dualRecord() {
 async function saveDual() {
   if (!S.dualId) return;
   const r = dualRecord();
-  await write("wrestle-dual-" + r.id, pack(r)).catch(() => {});
+  try { await write("wrestle-dual-" + r.id, pack(r)); } catch (e) { toast("Couldn't save this dual to stats. Check the connection."); return; }
   const entry = { id: r.id, date: r.date, home: r.home.name, away: r.away.name, hs: r.team.h, as: r.team.a, n: r.bouts.length };
   const list = DUALS.filter((d) => d.id !== r.id); list.unshift(entry);
   list.sort((x, y) => (y.date || "").localeCompare(x.date || ""));
