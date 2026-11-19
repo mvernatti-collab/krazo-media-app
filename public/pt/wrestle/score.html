@@ -644,6 +644,7 @@ function drawLineup(weights, lu) {
       <td><input data-lw="${esc(w)}" data-ls="h" list="dlh${i}" value="${esc((lu[w] || {}).h)}"><datalist id="dlh${i}">${rosterOpts(hk, w)}</datalist></td>
       <td><input data-lw="${esc(w)}" data-ls="a" list="dla${i}" value="${esc((lu[w] || {}).a)}"><datalist id="dla${i}">${rosterOpts(ak, w)}</datalist></td>
       <td><button data-startat="${i}" class="ghost" title="Start the dual at this weight">Start here</button></td></tr>`).join("");
+  setTimeout(markDupes, 0);
 }
 function readLineup() {
   const lu = {};
@@ -661,13 +662,35 @@ $("fillRoster").onclick = () => {
   }
   drawLineup(ws, lu); toast("Filled from rosters");
 };
-document.getElementById("lineupTbl").addEventListener("click", (e) => {
+document.getElementById("lineupTbl").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-startat]"); if (!b) return;
-  applyLineup(false); goBout(+b.dataset.startat);
+  if ((await applyLineup(false)) === false) return; goBout(+b.dataset.startat);
   document.querySelector('[data-tab="match"]').click();
 });
+// Rules check: one weight per wrestler per dual, and no more than one class above
+// their roster (certified) weight. Returns plain-English warnings.
+function lineupWarnings(hk, ak, lu, ws) {
+  const out = [];
+  for (const [k, s] of [[hk, "h"], [ak, "a"]]) {
+    const t = TEAMS[k], seen = {};
+    ws.forEach((w) => { const n = ((lu[w] || {})[s] || "").trim(); if (n) (seen[n.toLowerCase()] = seen[n.toLowerCase()] || { n, w: [] }).w.push(w); });
+    for (const x of Object.values(seen)) {
+      if (x.w.length > 1) out.push(`${x.n} (${t ? t.short : s}) is listed at ${x.w.join(" and ")}. A wrestler can only wrestle one weight in a dual.`);
+      const r = t && t.roster.find((y) => y.name.toLowerCase() === x.n.toLowerCase());
+      if (r && x.w.length === 1) { const gap = ws.indexOf(x.w[0]) - ws.indexOf(r.wt); if (r.wt && ws.includes(r.wt) && gap > 1) out.push(`${x.n} is on the roster at ${r.wt} but listed at ${x.w[0]}, ${gap} classes up. The limit is one class above their weigh-in weight.`); if (gap < 0) out.push(`${x.n} is on the roster at ${r.wt} but listed lower, at ${x.w[0]}. Check they made that weight.`); }
+    }
+  }
+  return out;
+}
+function markDupes() {
+  const cnt = {}; document.querySelectorAll("[data-lw]").forEach((i) => { const k = i.dataset.ls + "|" + i.value.trim().toLowerCase(); if (i.value.trim()) cnt[k] = (cnt[k] || 0) + 1; });
+  document.querySelectorAll("[data-lw]").forEach((i) => { const d = i.value.trim() && cnt[i.dataset.ls + "|" + i.value.trim().toLowerCase()] > 1; i.style.borderColor = d ? "#ED1C24" : ""; i.title = d ? "Listed at two weights" : ""; });
+}
+document.getElementById("lineupTbl").addEventListener("input", markDupes);
 async function applyLineup(fresh) {
   const hk = $("lHome").value, ak = $("lAway").value, lu = readLineup(), ws = currentWeights();
+  const warn = lineupWarnings(hk, ak, lu, ws);
+  if (warn.length && !confirm("Check the lineup:\n\n• " + warn.join("\n• ") + "\n\nSave anyway?")) return false;
   // learn new names into rosters
   let changed = false;
   for (const [k, s] of [[hk, "h"], [ak, "a"]]) {
@@ -688,10 +711,10 @@ async function applyLineup(fresh) {
   });
   await saveDual();
 }
-$("saveLineup").onclick = async () => { await applyLineup(false); toast("Lineup saved"); };
+$("saveLineup").onclick = async () => { if ((await applyLineup(false)) !== false) toast("Lineup saved"); };
 $("newDual").onclick = async () => {
   if (!confirm("Save this as a new dual? Team scores and bouts start at zero. The current dual stays in Saved duals.")) return;
-  await applyLineup(true); toast("New dual started");
+  if ((await applyLineup(true)) !== false) toast("New dual started");
 };
 function renderDualList() {
   $("dualList").innerHTML = DUALS.map((d) => `<tr class="${d.id === S.dualId ? "cur" : ""}"><td>${esc(d.date)}</td><td>${esc(d.home)} ${d.hs} – ${d.as} ${esc(d.away)}</td><td style="color:var(--mute)">${d.n} bouts</td><td>${d.id === S.dualId ? "<b>Live now</b>" : `<button data-resume="${d.id}" class="ghost">Resume</button>`}</td></tr>`).join("") || '<tr><td style="color:#777">No saved duals yet.</td></tr>';
