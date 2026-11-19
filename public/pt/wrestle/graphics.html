@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
 <style>
-:root{--red:#E31B23;--bg:#0c0c0f;--card:#17171c;--line:#2b2b32;--mute:#9a9aa3}
+:root{--red:#ED1C24;--bg:#0c0c0f;--card:#17171c;--line:#2b2b32;--mute:#9a9aa3}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif}
 .H{font-family:Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-weight:400}
@@ -34,6 +34,9 @@ input{width:100%}
 .pre button small{display:block;color:var(--mute)}
 .now{font-size:28px;line-height:1.1}
 .now small{display:block;font:14px -apple-system,Arial;color:var(--mute);text-transform:none;letter-spacing:0;margin-top:4px}
+.spi{display:flex;align-items:center;gap:8px;background:#fff;color:#000;padding:6px 8px;border-radius:8px}
+.spi img{height:40px;max-width:120px;object-fit:contain}
+.spi button{background:#eee;color:#000;border-color:#ccc;padding:4px 8px}
 .pv{position:relative;width:100%;aspect-ratio:16/9;background:#3d5a2e;border-radius:10px;overflow:hidden}
 .pv iframe{position:absolute;left:0;top:0;width:1920px;height:1080px;border:0;transform-origin:0 0}
 @media (max-width:820px){main{grid-template-columns:1fr}}
@@ -56,6 +59,9 @@ input{width:100%}
       <button id="gBug">Scorebug<span id="gBugS">on</span></button>
       <button id="gNext">Up next<span>matchup + records</span></button>
       <button id="gDual">Dual summary<span>all bouts</span></button>
+      <button id="gOpen">Opening card<span>logos + dual records</span></button>
+      <button id="gBrk">Period break<span>score after the period</span></button>
+      <button id="gFin">Final<span>dual result</span></button>
       <button id="gClear">Hide all cards<span>back to the bug</span></button>
     </div>
     <div class="row" style="margin-top:10px">
@@ -78,6 +84,13 @@ input{width:100%}
   </div>
 
   <div class="card full">
+    <div class="row"><div class="lbl" style="margin:0">Sponsors</div><div class="sp"></div><button id="gSpon">Sponsor bug: off</button></div>
+    <div style="color:var(--mute);font-size:13px;margin:6px 0 10px">Top-right corner, rotates every 8 seconds. Logos look best on white. They hide during the opening and final cards.</div>
+    <div class="row"><input id="spName" placeholder="Sponsor name" style="width:auto;flex:1"><input id="spFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="width:auto"><button id="spAdd" class="live">Add sponsor</button></div>
+    <div class="row" id="spList" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card full">
     <div class="lbl">Overlay preview</div>
     <div class="pv" id="pv"><iframe id="pvf" src="/pt/wrestle/overlay.html?preview=1" title="Overlay preview"></iframe></div>
   </div>
@@ -85,7 +98,7 @@ input{width:100%}
 <script type="module">
 import { write, listen, read } from "/pt/pt-sync.js";
 import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, pack, defaultState } from "/pt/wrestle/core.js";
-import { GFX, blankGfx, loadDuals, buildStats, recOf } from "/pt/wrestle/records.js";
+import { GFX, blankGfx, loadDuals, buildStats, recOf, toggleCard, dualRecord, shrinkImage } from "/pt/wrestle/records.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let S = defaultState(), G = blankGfx(), STATS = new Map();
@@ -97,10 +110,29 @@ const rec = (s) => recOf(STATS, (s === "h" ? S.home : S.away).name, lu()[s]);
 function send() { G.v = Date.now(); paint(); write(GFX, pack(G)).catch(() => alert("Couldn't send. Check connection.")); }
 function setShow(fn) { fn(G.show); send(); }
 $("gBug").onclick = () => setShow((g) => (g.bug = !g.bug));
-$("gNext").onclick = () => { G.rec = { wt: wt(), h: rec("h"), a: rec("a") }; setShow((g) => { g.next = !g.next; if (g.next) { g.dual = false; g.lt = false; } }); };
-$("gDual").onclick = () => setShow((g) => { g.dual = !g.dual; if (g.dual) { g.next = false; g.lt = false; } });
-$("gClear").onclick = () => setShow((g) => { g.next = false; g.dual = false; g.lt = false; });
-function showLt(t, s) { G.lt = { title: t, sub: s }; $("lt1").value = t; $("lt2").value = s; setShow((g) => { g.lt = true; g.next = false; g.dual = false; }); }
+$("gNext").onclick = () => { G.rec = { wt: wt(), h: rec("h"), a: rec("a") }; setShow((g) => toggleCard(g, "next")); };
+$("gDual").onclick = () => setShow((g) => toggleCard(g, "dual"));
+$("gOpen").onclick = () => { G.open = { h: dualRecord(FULL, S.home.name, S.dualId), a: dualRecord(FULL, S.away.name, S.dualId) }; setShow((g) => toggleCard(g, "open")); };
+$("gBrk").onclick = () => setShow((g) => toggleCard(g, "brk"));
+$("gFin").onclick = () => setShow((g) => toggleCard(g, "fin"));
+$("gClear").onclick = () => setShow((g) => { ["next", "dual", "open", "brk", "fin", "lt"].forEach((c) => (g[c] = false)); });
+$("gSpon").onclick = () => { if (!SPON.length && !G.show.spon) return alert("Add a sponsor first."); setShow((g) => (g.spon = !g.spon)); };
+function showLt(t, s) { G.lt = { title: t, sub: s }; $("lt1").value = t; $("lt2").value = s; setShow((g) => { g.lt = true; ["next", "dual", "open", "brk", "fin"].forEach((c) => (g[c] = false)); }); }
+
+// sponsors (shared doc so every device and the overlay see the same list)
+let SPON = [];
+const saveSpon = () => write("wrestle-sponsors", pack({ v: Date.now(), list: SPON })).catch(() => alert("Couldn't save sponsors"));
+function paintSpon() {
+  $("spList").innerHTML = SPON.map((x, i) => `<div class="spi">${x.img ? `<img src="${x.img}" alt="">` : ""}<b>${esc(x.name || "")}</b><button data-spx="${i}" aria-label="Remove sponsor">×</button></div>`).join("") || '<span style="color:#777">No sponsors yet.</span>';
+}
+$("spAdd").onclick = async () => {
+  const f = $("spFile").files[0], name = $("spName").value.trim();
+  if (!f && !name) return alert("Add a name, a logo, or both.");
+  const img = f ? await shrinkImage(f, 340) : "";
+  SPON.push({ name, img }); $("spName").value = ""; $("spFile").value = ""; paintSpon(); saveSpon();
+};
+$("spList").onclick = (e) => { const b = e.target.closest("[data-spx]"); if (!b) return; SPON.splice(+b.dataset.spx, 1); paintSpon(); saveSpon(); };
+listen("wrestle-sponsors", (d) => { const x = unpack(d); SPON = (x && x.list) || []; paintSpon(); }, () => {}, 5000);
 $("ltShow").onclick = () => showLt($("lt1").value.trim(), $("lt2").value.trim());
 $("ltHide").onclick = () => setShow((g) => (g.lt = false));
 
@@ -121,7 +153,8 @@ $("auto").onclick = (e) => { const b = e.target.closest("[data-a]"); if (!b) ret
 
 function paint() {
   $("gBug").classList.toggle("live", !!G.show.bug); $("gBugS").textContent = G.show.bug ? "on" : "off";
-  $("gNext").classList.toggle("live", !!G.show.next); $("gDual").classList.toggle("live", !!G.show.dual);
+  for (const [id, c] of [["gNext", "next"], ["gDual", "dual"], ["gOpen", "open"], ["gBrk", "brk"], ["gFin", "fin"]]) $(id).classList.toggle("live", !!G.show[c]);
+  $("gSpon").classList.toggle("live", !!G.show.spon); $("gSpon").textContent = "Sponsor bug: " + (G.show.spon ? "on" : "off");
   $("ltShow").textContent = G.show.lt ? "Update" : "Show";
   $("ltHide").classList.toggle("live", false);
   const n = lu(), m = S.m;
@@ -142,11 +175,12 @@ const fit = () => { const w = $("pv").clientWidth; $("pvf").style.transform = `s
 addEventListener("resize", fit); fit();
 
 listen(DOC, (d) => { const s = unpack(d); if (s) { S = s; paint(); } }, (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live link" : st === "polling" ? "Backup link" : "No connection"; });
-listen(GFX, (d) => { const g = unpack(d); if (!g) return; const b = blankGfx(); G = { ...b, ...g, show: { ...b.show, ...(g.show || {}) }, lt: { ...b.lt, ...(g.lt || {}) } }; paint(); }, () => {}, 2000);
+listen(GFX, (d) => { const g = unpack(d); if (!g) return; const b = blankGfx(); G = { ...b, ...g, show: { ...b.show, ...(g.show || {}) }, lt: { ...b.lt, ...(g.lt || {}) }, open: { ...b.open, ...(g.open || {}) } }; paint(); }, () => {}, 2000);
 let lastBeat = 0, prevAlive;
 listen("wrestle-status", (d) => { if (!d) return; if (prevAlive !== undefined && d.alive !== prevAlive) lastBeat = performance.now(); prevAlive = d.alive; }, () => {}, 3000);
 setInterval(() => { const ok = lastBeat && performance.now() - lastBeat < 15000; const p = $("pOver"); p.className = "pill " + (ok ? "ok" : "bad"); p.textContent = ok ? "Overlay online" : "Overlay offline"; }, 1000);
-const refresh = async () => { STATS = buildStats(await loadDuals().catch(() => [])); paint(); };
+let FULL = [];
+const refresh = async () => { FULL = await loadDuals().catch(() => []); STATS = buildStats(FULL); paint(); };
 refresh(); setInterval(refresh, 60000);
 paintPresets(); paint();
 </script>

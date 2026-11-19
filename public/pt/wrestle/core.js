@@ -48,7 +48,7 @@ export function defaultState() {
   weights.forEach((w) => (lineup[w] = { h: "", a: "" }));
   return {
     v: 0,
-    home: { name: "Ozark", short: "OZK", color: "#E31B23" },
+    home: { name: "Ozark", short: "OZK", color: "#ED1C24" },
     away: { name: "Opponent", short: "OPP", color: "#1F4FA0" },
     bands: { h: "green", a: "red" }, // ankle band colors (home usually green)
     division: "boys",

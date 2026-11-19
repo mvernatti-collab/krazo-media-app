@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
 <style>
-:root{--red:#E31B23;--bg:#0c0c0f;--card:#17171c;--line:#2b2b32;--mute:#9a9aa3;--g:#16A34A;--r:#DC2626}
+:root{--red:#ED1C24;--bg:#0c0c0f;--card:#17171c;--line:#2b2b32;--mute:#9a9aa3;--g:#16A34A;--r:#DC2626}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif}
 .H{font-family:Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-weight:400}
@@ -174,6 +174,9 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
       <button id="gBug">Scorebug: on</button>
       <button id="gNext">Up next card</button>
       <button id="gDual">Dual summary card</button>
+      <button id="gOpen">Opening card</button>
+      <button id="gBrk">Period break</button>
+      <button id="gFin">Final</button>
       <button id="gClear" class="ghost">Hide cards</button>
       <div class="sp"></div>
       <button onclick="window.open('/pt/wrestle/graphics.html','_blank')">Graphics remote ↗</button>
@@ -225,7 +228,11 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
       <label>Name <input id="tName" size="14" placeholder="Nixa"></label>
       <label>Short <input id="tShort" size="5" maxlength="4" placeholder="NIX"></label>
       <label>Color <input id="tColor" type="color" value="#1f4fa0"></label>
+      <label>Logo <input id="tLogo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label>
+      <img id="tLogoPv" alt="" style="height:54px;max-width:90px;object-fit:contain;display:none;background:#2a2a31;padding:4px">
+      <button id="tLogoX" class="ghost" style="display:none">Remove logo</button>
     </div>
+    <div style="color:var(--mute);font-size:13px;margin-top:6px">Use a PNG with a transparent background if you have one. Ozark uses the paw logo automatically.</div>
     <div class="lbl" style="margin-top:12px">Roster: one wrestler per line · weight, name (list backups at the same weight too)</div>
     <textarea id="tRoster" spellcheck="false" placeholder="106, Jake Miller&#10;113, Sam Cole&#10;113, Eli Park"></textarea>
     <div class="row" style="margin-top:8px">
@@ -247,7 +254,7 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 
 <script type="module">
 import { write, listen, read } from "/pt/pt-sync.js";
-import { GFX, blankGfx, loadDuals, buildStats, recOf } from "/pt/wrestle/records.js";
+import { GFX, blankGfx, loadDuals, buildStats, recOf, toggleCard, dualRecord as teamDualRec, shrinkImage, logoSrc } from "/pt/wrestle/records.js";
 import { DOC, WEIGHTS, PERIODS, periodById, RESULTS, suggestResult, blankMatch, defaultState, remaining, fmtClock, matchElapsed, fmtElapsed, pack, unpack, other, bandHex, derive, SCORING } from "/pt/wrestle/core.js";
 
 let S = defaultState();
@@ -255,7 +262,8 @@ let TEAMS = {};          // saved teams: key -> {name, short, color, roster:[{wt
 let DUALS = [];          // saved duals index
 let loaded = false, winner = null, periodDone = false, selEv = -1;
 let G = blankGfx(), STATS = new Map();
-const refreshStats = async () => { STATS = buildStats(await loadDuals().catch(() => [])); };
+let FULL = [];
+const refreshStats = async () => { FULL = await loadDuals().catch(() => []); STATS = buildStats(FULL); };
 refreshStats(); setInterval(refreshStats, 120000);
 const hist = [];
 const $ = (id) => document.getElementById(id);
@@ -315,12 +323,12 @@ const wt = () => S.weights[S.idx];
 const names = () => S.lineup[wt()] || { h: "", a: "" };
 const team = (s) => (s === "h" ? S.home : S.away);
 const nm = (s) => names()[s] || team(s).name + " wrestler";
-function pop(side, text, pts) { S.pop = { n: (S.pop.n || 0) + 1, side, text, pts: pts || 0, wt: wt() }; }
+function pop(side, text, pts, k) { S.pop = { n: (S.pop.n || 0) + 1, side, text, pts: pts || 0, wt: wt(), k: k || "" }; }
 function addEv(k, s, extra = {}) {
   change(() => {
     S.m.ev.push({ k, s, p: S.m.period, c: remaining(S.m), ...extra });
     const d = derive(S.m.ev), last = d.list[d.list.length - 1];
-    if (k !== "POS" && k !== "ADJ") pop(last.pts ? last.to : s, last.txt.replace(/ \+\d+$/, "").toUpperCase(), last.pts);
+    if (k !== "POS" && k !== "ADJ") pop(last.pts ? last.to : s, last.txt.replace(/ \+\d+$/, "").toUpperCase(), last.pts, k);
   });
 }
 
@@ -525,13 +533,16 @@ $("nextW").onclick = () => goBout(S.idx + 1);
 function gfx(fn) { fn(G.show); G.v = Date.now(); paintGfx(); write(GFX, pack(G)).catch(() => toast("Couldn't send graphic")); }
 function paintGfx() {
   $("gBug").textContent = "Scorebug: " + (G.show.bug ? "on" : "off");
-  $("gNext").classList.toggle("on", !!G.show.next); $("gDual").classList.toggle("on", !!G.show.dual);
+  for (const [id, c] of [["gNext", "next"], ["gDual", "dual"], ["gOpen", "open"], ["gBrk", "brk"], ["gFin", "fin"]]) $(id).classList.toggle("on", !!G.show[c]);
 }
 $("gBug").onclick = () => gfx((g) => (g.bug = !g.bug));
 $("gNext").onclick = () => gfx((g) => {
-  G.rec = { wt: wt(), h: recOf(STATS, S.home.name, names().h), a: recOf(STATS, S.away.name, names().a) }; g.next = !g.next; if (g.next) { g.dual = false; g.lt = false; } });
-$("gDual").onclick = () => gfx((g) => { g.dual = !g.dual; if (g.dual) { g.next = false; g.lt = false; } });
-$("gClear").onclick = () => gfx((g) => { g.next = false; g.dual = false; g.lt = false; });
+  G.rec = { wt: wt(), h: recOf(STATS, S.home.name, names().h), a: recOf(STATS, S.away.name, names().a) }; toggleCard(g, "next"); });
+$("gDual").onclick = () => gfx((g) => toggleCard(g, "dual"));
+$("gOpen").onclick = () => gfx((g) => { G.open = { h: teamDualRec(FULL, S.home.name, S.dualId), a: teamDualRec(FULL, S.away.name, S.dualId) }; toggleCard(g, "open"); });
+$("gBrk").onclick = () => gfx((g) => toggleCard(g, "brk"));
+$("gFin").onclick = () => gfx((g) => toggleCard(g, "fin"));
+$("gClear").onclick = () => gfx((g) => { ["next", "dual", "open", "brk", "fin", "lt"].forEach((c) => (g[c] = false)); });
 
 // ---------- teams ----------
 let editKey = null;
@@ -541,8 +552,17 @@ function renderTeams() {
     `<button data-team="${k}" class="${k === editKey ? "on" : ""}"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${t.color};margin-right:6px"></span>${esc(t.name)} <span style="color:var(--mute)">${t.roster.length}</span></button>`).join("") || '<span style="color:#777">No saved teams yet.</span>';
   $("teamBtns").onclick = (e) => { const b = e.target.closest("[data-team]"); if (!b) return; editTeam(b.dataset.team); };
 }
+let newLogo = null, dropLogo = false;
+async function showLogo(t) {
+  const src = newLogo || (dropLogo ? "" : await logoSrc(t));
+  $("tLogoPv").src = src || ""; $("tLogoPv").style.display = src ? "block" : "none"; $("tLogoX").style.display = t.logo || newLogo ? "inline-block" : "none";
+}
+$("tLogo").onchange = async () => { const f = $("tLogo").files[0]; if (!f) return; newLogo = await shrinkImage(f); dropLogo = false; showLogo(TEAMS[editKey] || {}); };
+$("tLogoX").onclick = () => { newLogo = null; dropLogo = true; $("tLogo").value = ""; showLogo({}); };
 function editTeam(k) {
+  newLogo = null; dropLogo = false; $("tLogo").value = "";
   editKey = k; const t = TEAMS[k] || { name: "", short: "", color: "#1f4fa0", roster: [] };
+  showLogo(t);
   $("teamEditTitle").textContent = k ? "Edit " + t.name : "New team";
   $("tName").value = t.name; $("tShort").value = t.short; $("tColor").value = t.color;
   $("tRoster").value = t.roster.slice().sort((a, b) => (parseFloat(a.wt) || 0) - (parseFloat(b.wt) || 0)).map((r) => `${r.wt}, ${r.name}`).join("\n");
@@ -553,7 +573,13 @@ $("tSave").onclick = async () => {
   const name = $("tName").value.trim(); if (!name) return toast("Team needs a name");
   const k = editKey || keyOf(name);
   const roster = $("tRoster").value.split("\n").map((l) => { const i = l.indexOf(","); return i < 0 ? null : { wt: l.slice(0, i).trim(), name: l.slice(i + 1).trim() }; }).filter((r) => r && r.name);
-  TEAMS[k] = { name, short: ($("tShort").value.trim() || name.slice(0, 3)).toUpperCase(), color: $("tColor").value, roster };
+  let logo = (TEAMS[k] && TEAMS[k].logo) || "";
+  if (newLogo) { await write("wrestle-logo-" + k, { img: newLogo }).catch(() => toast("Couldn't upload logo")); logo = "doc:" + k + "?" + Date.now(); }
+  if (dropLogo) logo = "";
+  TEAMS[k] = { name, short: ($("tShort").value.trim() || name.slice(0, 3)).toUpperCase(), color: $("tColor").value, roster, logo };
+  newLogo = null; dropLogo = false;
+  if (S.homeKey === k || keyOf(S.home.name) === k) change(() => (S.home = { name: TEAMS[k].name, short: TEAMS[k].short, color: TEAMS[k].color, logo }));
+  else if (S.awayKey === k || keyOf(S.away.name) === k) change(() => (S.away = { name: TEAMS[k].name, short: TEAMS[k].short, color: TEAMS[k].color, logo }));
   editKey = k; await saveTeams(); renderTeams(); toast("Team saved");
 };
 $("tDel").onclick = async () => {
@@ -615,8 +641,8 @@ async function applyLineup(fresh) {
   change(() => {
     if (fresh) { S.dualId = "d" + Date.now().toString(36); S.team = { h: 0, a: 0 }; S.bouts = []; S.idx = 0; S.m = blankMatch(); }
     const H = TEAMS[hk], A = TEAMS[ak];
-    if (H) { S.home = { name: H.name, short: H.short, color: H.color }; S.homeKey = hk; }
-    if (A) { S.away = { name: A.name, short: A.short, color: A.color }; S.awayKey = ak; }
+    if (H) { S.home = { name: H.name, short: H.short, color: H.color, logo: H.logo || "" }; S.homeKey = hk; }
+    if (A) { S.away = { name: A.name, short: A.short, color: A.color, logo: A.logo || "" }; S.awayKey = ak; }
     S.date = $("lDate").value || today();
     S.division = $("division").value; S.weights = ws.slice(); S.lineup = lu;
     S.bands = $("swapBands").checked ? { h: "red", a: "green" } : { h: "green", a: "red" };
@@ -654,7 +680,7 @@ listen(DOC, (d) => {
 listen("wrestle-teams", (d) => {
   const t = unpack(d);
   TEAMS = (t && t.teams) || {};
-  if (!Object.keys(TEAMS).length) { TEAMS = { ozark: { name: "Ozark", short: "OZK", color: "#E31B23", roster: [] } }; }
+  if (!Object.keys(TEAMS).length) { TEAMS = { ozark: { name: "Ozark", short: "OZK", color: "#ED1C24", roster: [] } }; }
   if (document.getElementById("tab-teams").classList.contains("on")) renderTeams();
   if (document.getElementById("tab-lineup").classList.contains("on") && !document.activeElement.dataset?.lw) fillLineup();
 }, () => {}, 5000);

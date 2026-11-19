@@ -46,4 +46,48 @@ export function recOf(stats, team, name) { const x = name && stats.get(rkey(team
 // Graphics state lives in its own doc so the scorer and a remote graphics
 // operator can both push without overwriting each other's scoring data.
 export const GFX = "wrestle-gfx";
-export const blankGfx = () => ({ v: 0, show: { bug: true, next: false, dual: false, lt: false }, lt: { title: "", sub: "" }, rec: { h: "", a: "" } });
+export const CARDS = ["next", "dual", "open", "brk", "fin"]; // full cards: only one at a time
+export const blankGfx = () => ({ v: 0, show: { bug: true, next: false, dual: false, lt: false, open: false, brk: false, fin: false, spon: false }, lt: { title: "", sub: "" }, rec: { h: "", a: "" }, open: { h: "", a: "" } });
+// Turn one full card on (or off) and every other card off.
+export function toggleCard(show, which) { const on = !show[which]; CARDS.forEach((c) => (show[c] = false)); show[which] = on; if (on) show.lt = false; }
+
+// Season dual record for a team, not counting the dual with id `skip`.
+export function dualRecord(duals, name, skip) {
+  let w = 0, l = 0, t = 0;
+  for (const d of duals) {
+    if (d.id === skip || !(d.bouts || []).length) continue;
+    const s = d.home.name === name ? "h" : d.away.name === name ? "a" : null; if (!s) continue;
+    const o = s === "h" ? "a" : "h";
+    if (d.team[s] > d.team[o]) w++; else if (d.team[s] < d.team[o]) l++; else t++;
+  }
+  return w + l + t ? `${w}-${l}${t ? "-" + t : ""}` : "";
+}
+
+// ---- Logos ----
+// team.logo is a site path (built-in Ozark art) or "doc:<key>" for an uploaded
+// logo stored in its own doc (pt/wrestle-logo-<key>) so the live doc stays small.
+export const OZARK_LOGO = "/pt/wrestle/img/ozark-paw.png";
+export const OZARK_CREST = "/pt/wrestle/img/ozark-crest.png";
+const cache = {};
+export async function logoSrc(team) {
+  const ref = (team && team.logo) || (team && /^ozark$/i.test(team.name || "") ? OZARK_LOGO : "");
+  if (!ref) return "";
+  if (!ref.startsWith("doc:")) return ref;
+  if (!(ref in cache)) cache[ref] = read("wrestle-logo-" + ref.slice(4).split("?")[0]).then((d) => (d && d.img) || "").catch(() => "");
+  return cache[ref];
+}
+export const crestSrc = async (team) => (team && /^ozark$/i.test(team.name || "") && !team.logo ? OZARK_CREST : logoSrc(team));
+
+// Shrink an uploaded image file to a small PNG data URL (fits in one Firestore doc).
+export function shrinkImage(file, max = 260) {
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      res(c.toDataURL("image/png"));
+    };
+    img.onerror = rej; img.src = url;
+  });
+}

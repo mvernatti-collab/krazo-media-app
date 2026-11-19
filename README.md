@@ -138,6 +138,8 @@ Placement options (add to the address, measured in 1920×1080 pixels):
 - **Scorer (tablet/laptop at the table):** `/pt/wrestle/score.html`: Match / Lineup / Teams tabs. Buttons follow position (neutral → takedown; top → near falls and pin; bottom → escape and reversal). Every tap is logged as an event, and score, position and penalty counts are rebuilt from the log.
 - **Announcer view:** `/pt/wrestle/broadcast.html`: live bout, clock, position, season records and talking points, on deck, results, dual math
 - **Graphics remote:** `/pt/wrestle/graphics.html`: scorebug / Up Next / Dual summary / lower thirds (auto from the match, or custom and saved presets), with preview. Graphics state lives in `pt/wrestle-gfx`, separate from scoring.
+- **Branding & animation:** Ozark paw / crest logos built in (`public/pt/wrestle/img`). Opponent logos upload on the Teams tab (stored in `pt/wrestle-logo-<team>`). Takedown / reversal / near fall get a move stinger; fall / tech fall get a full-width stinger, then the result lower third and an animated dual-score update. Cards: Opening, Up next, Period break, Dual summary, Final. Sponsor bug rotates logos from `pt/wrestle-sponsors` (managed in the graphics remote).
+- Overlay previews: `overlay.html?bg=1&demo=open` (also `td`, `fall`, `fin`, `brk`, `next`, `dual`, `lt,spon`).
 - Scorer keys: Space = clock, [ ] = ∓1s, ⌘/Ctrl+Z = undo. Tap the clock to set it. Tap a log entry to change, swap or delete it.
 - **Stats:** `/pt/wrestle/stats.html`: season totals per wrestler, dual box scores, CSV export
 - Saved data: `pt/wrestle-teams` (rosters), `pt/wrestle-duals` (index), `pt/wrestle-dual-<id>` (each dual with full event logs)
