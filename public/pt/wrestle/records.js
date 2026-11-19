@@ -40,7 +40,7 @@ export function buildStats(duals) {
         else if (e.k === "STALL" && e.s === s) st.stall++;
         else if ((e.k === "PEN" || e.k === "CAUT") && e.s === s) st.pen++;
       }
-      st.m.push({ dual: r.id, date: r.date, opp: (s === "h" ? b.an : b.hn) || "Open", oppTeam: (s === "h" ? r.away : r.home).name, wt: b.wt, won, type: b.type, score: b.score, time: b.time });
+      st.m.push({ dual: r.id, side: s, date: r.date, opp: (s === "h" ? b.an : b.hn) || "Open", oppTeam: (s === "h" ? r.away : r.home).name, wt: b.wt, won, type: b.type, score: b.score, time: b.time });
     }
   }
   for (const x of map.values()) { x.wt = Object.entries(x.wts).sort((a, b) => b[1] - a[1])[0][0]; x.rec = `${x.W}-${x.L}`; }

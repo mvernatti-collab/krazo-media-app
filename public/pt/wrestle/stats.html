@@ -35,6 +35,22 @@ td.w{color:#7ee2a0;font-weight:700}
 .kpi div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:140px}
 .kpi b{display:block;font-family:Anton,Impact,sans-serif;font-weight:400;font-size:34px}
 .kpi span{color:var(--mute);font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+.mrow{cursor:pointer}.mrow:hover td{background:#20202a}.mrow.open td{background:#20202a}
+.mrow td:last-child::after{content:" ▸";color:var(--mute)}.mrow.open td:last-child::after{content:" ▾"}
+td.bdc{padding:0 !important;white-space:normal;text-align:left}
+.bd{padding:14px;background:#111116;border-bottom:1px solid var(--line);display:grid;gap:14px}
+.bd .hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.bd .hd b{font:400 26px Anton,Impact,sans-serif;text-transform:uppercase}
+.bd .hd span{color:var(--mute);font-size:13px}
+.bd table{width:auto;font-size:14px}
+.bd th,.bd td{padding:5px 10px;text-align:center;border-bottom:1px solid var(--line)}
+.bd th:first-child,.bd td:first-child{text-align:left}
+.bd .me{color:#7ee2a0}.bd .op{color:#ff8a8f}
+.bd .tl{display:grid;grid-template-columns:42px 52px 1fr 56px;gap:4px 10px;font-size:14px;max-width:640px}
+.bd .tl div{padding:4px 0;border-bottom:1px solid #1f1f26}
+.bd .tl .m{color:var(--mute)}
+.bd .tl .sc{text-align:right;font-family:Anton,Impact,sans-serif;font-size:16px}
+.bd .two{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
 </style>
 </head>
 <body>
@@ -56,7 +72,7 @@ td.w{color:#7ee2a0;font-weight:700}
   <div class="card" id="box" style="display:none"></div>
 </main>
 <script type="module">
-import { RESULTS } from "/pt/wrestle/core.js";
+import { RESULTS, PERIODS, periodById, derive, fmtClock, other } from "/pt/wrestle/core.js";
 import { loadDuals, buildStats } from "/pt/wrestle/records.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -113,10 +129,50 @@ $("wTbl").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-i]"); if (!tr) return;
   const r = ROWS[+tr.dataset.i];
   $("detail").style.display = "block";
-  $("detail").innerHTML = `<div class="lbl">${esc(r.name)} · ${esc(r.team)} · ${r.rec}</div><table><tr><th class="l">Date</th><th class="l">Wt</th><th class="l">Opponent</th><th class="l">Result</th></tr>` +
-    r.m.map((m) => `<tr><td class="l">${esc(m.date)}</td><td class="l">${esc(m.wt)}</td><td class="l">${esc(m.opp)} <span style="color:var(--mute)">${esc(m.oppTeam)}</span></td><td class="l ${m.won ? "w" : ""}">${m.won ? "W" : "L"} · ${RESULTS[m.type].label}${m.type === "FALL" ? " " + esc(m.time) : m.score ? " " + esc(m.score) : ""}</td></tr>`).join("") + "</table>";
+  const ms = r.m.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  $("detail").innerHTML = `<div class="lbl">${esc(r.name)} · ${esc(r.team)} · ${r.rec} <span style="text-transform:none;letter-spacing:0">· tap a match for the full breakdown</span></div><table id="mTbl"><tr><th class="l">Date</th><th class="l">Wt</th><th class="l">Opponent</th><th class="l">Result</th></tr>` +
+    ms.map((m, i) => `<tr class="mrow" data-mi="${i}"><td class="l">${esc(m.date)}</td><td class="l">${esc(m.wt)}</td><td class="l">${esc(m.opp)} <span style="color:var(--mute)">${esc(m.oppTeam)}</span></td><td class="l ${m.won ? "w" : ""}">${m.won ? "W" : "L"} · ${RESULTS[m.type].label}${m.type === "FALL" ? " " + esc(m.time) : m.score ? " " + esc(m.score) : ""}</td></tr>`).join("") + "</table>";
+  $("mTbl").onclick = (ev) => {
+    const row = ev.target.closest(".mrow"); if (!row) return;
+    const nx = row.nextElementSibling;
+    if (nx && nx.classList.contains("bdr")) { nx.remove(); row.classList.remove("open"); return; }
+    row.classList.add("open");
+    row.insertAdjacentHTML("afterend", `<tr class="bdr"><td class="bdc" colspan="4">${breakdown(r, ms[+row.dataset.mi])}</td></tr>`);
+  };
   $("detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
 });
+// Everything about one match: result, points by period, move counts, and every action.
+function breakdown(r, m) {
+  const d = DUALS.find((x) => x.id === m.dual), b = d && (d.bouts || []).find((x) => x.wt === m.wt);
+  if (!b) return `<div class="bd">This match's details weren't saved.</div>`;
+  const me = m.side || (b.hn === r.name ? "h" : "a"), op = other(me);
+  const nameOf = (s) => (s === me ? r.name : m.opp), teamOf = (s) => (s === "h" ? d.home : d.away).name;
+  const res = `${m.won ? "Won" : "Lost"} · ${RESULTS[b.type].label}${b.type === "FALL" ? " at " + esc(b.time) : b.score ? " " + esc(b.score) : ""}`;
+  const head = `<div class="hd"><b class="${m.won ? "me" : "op"}">${res}</b><span>${esc(r.name)} (${esc(teamOf(me))}) vs ${esc(m.opp)} (${esc(teamOf(op))}) · ${esc(m.wt)} lbs · ${esc(d.date)}</span></div>`;
+  if (b.type === "FOR" || !(b.ev || []).length) return `<div class="bd">${head}<div style="color:var(--mute)">${b.type === "FOR" ? "Forfeit, so no match was wrestled." : "No scoring actions were recorded for this match."}</div></div>`;
+  const list = derive(b.ev).list;
+  // points by period
+  const per = {}, order = [];
+  for (const e of list) { if (!per[e.p]) { per[e.p] = { [me]: 0, [op]: 0 }; order.push(e.p); } if (e.pts > 0) per[e.p][e.to] += e.pts; }
+  order.sort((x, y) => PERIODS.findIndex((p) => p.id === x) - PERIODS.findIndex((p) => p.id === y));
+  const tot = (s) => order.reduce((n, p) => n + per[p][s], 0);
+  const perT = `<table><tr><th></th>${order.map((p) => `<th>${periodById(p).label}</th>`).join("")}<th>Total</th></tr>` +
+    [me, op].map((s) => `<tr><td class="${s === me ? "me" : "op"}">${esc(nameOf(s))}</td>${order.map((p) => `<td>${per[p][s]}</td>`).join("")}<td><b>${tot(s)}</b></td></tr>`).join("") + "</table>";
+  // move counts
+  const cnt = (s, f) => list.filter((e) => f(e) && e.s === s).length;
+  const rows = [["Takedowns", (e) => e.k === "TD"], ["Escapes", (e) => e.k === "E"], ["Reversals", (e) => e.k === "R"], ["Near falls", (e) => e.k.startsWith("NF")], ["Stalling calls", (e) => e.k === "STALL"], ["Penalties / cautions", (e) => e.k === "PEN" || e.k === "CAUT"]];
+  const nfp = (s) => list.filter((e) => e.k.startsWith("NF") && e.s === s).reduce((n, e) => n + e.pts, 0);
+  const cntT = `<table><tr><th></th><th class="me">${esc(r.name.split(" ")[0])}</th><th class="op">${esc(String(m.opp).split(" ")[0])}</th></tr>` +
+    rows.map(([l, f]) => `<tr><td>${l}</td><td>${cnt(me, f)}${l === "Near falls" && nfp(me) ? ` <span style="color:var(--mute)">(${nfp(me)} pts)</span>` : ""}</td><td>${cnt(op, f)}${l === "Near falls" && nfp(op) ? ` <span style="color:var(--mute)">(${nfp(op)} pts)</span>` : ""}</td></tr>`).join("") + "</table>";
+  // every action, scored from this wrestler's side
+  const tl = list.filter((e) => e.k !== "POS" || e.pick || e.s !== "N" || e.p !== "1").map((e) => {
+    const who = e.k === "POS" ? (e.ch || null) : ["STALL", "PEN", "CAUT"].includes(e.k) ? e.s : e.to;
+    const txt = e.k === "POS" ? (e.pick ? e.txt : e.s === "N" ? "Neutral start" : nameOf(e.s) + " on top") : e.txt;
+    return `<div class="m">${periodById(e.p).label}</div><div class="m">${fmtClock(e.c ?? 0)}</div><div>${who ? `<b class="${who === me ? "me" : "op"}">${esc(nameOf(who))}</b> ` : ""}${esc(txt)}</div><div class="sc">${e[me]}–${e[op]}</div>`;
+  }).join("");
+  const end = `<div class="m"></div><div class="m">${b.type === "FALL" ? esc(b.time) : ""}</div><div><b class="${m.won ? "me" : "op"}">${esc(nameOf(m.won ? me : op))}</b> wins · ${RESULTS[b.type].label}</div><div class="sc">${b[me] ?? tot(me)}–${b[op] ?? tot(op)}</div>`;
+  return `<div class="bd">${head}<div class="two">${perT}${cntT}</div><div class="tl">${tl}${end}</div></div>`;
+}
 $("dTbl").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-dual]"); if (!tr) return;
   const d = DUALS.find((x) => x.id === tr.dataset.dual);
