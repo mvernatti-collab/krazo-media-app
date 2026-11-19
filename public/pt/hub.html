@@ -53,6 +53,7 @@ import { listen, read, write } from "/pt/pt-sync.js";
 import { DOC, unpack, pack } from "/pt/wrestle/core.js";
 import { loadAccess, saveAccess, isDirector, signIn, signOut, sha, newCode } from "/pt/wrestle/gate.js";
 import { wrestlingLinks, renderLinks, LINK_CSS, qrSvg } from "/pt/wrestle/links.js";
+import { loadTestData, removeTestData } from "/pt/wrestle/testdata.js";
 document.head.insertAdjacentHTML("beforeend", `<style>${LINK_CSS}</style>`);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -115,7 +116,15 @@ function hub() {
     <div class="prl" id="prl"></div>
 
     <h2>Other tools</h2>
-    <div id="ol"></div>`;
+    <div id="ol"></div>
+
+    <h2>Test data</h2>
+    <p class="sub">Fictional teams (Ozark Test, Brightwater, Kestrel Valley, Ironwood Prairie, Stonebrook) with full rosters and four finished duals, so records, stats and the opening card have something to show. Your real teams and duals aren't touched.</p>
+    <div class="card row">
+      <button id="tdLoad">Load test teams + past duals</button>
+      <button id="tdLive">…and put a test dual on the mat</button>
+      <button id="tdDel" class="ghost">Remove test data</button>
+    </div>`;
   renderLinks($("wl"), wrestlingLinks(A.codes), toast);
   renderLinks($("ol"), [
     { title: "Wrestling explainer clips", who: "Rules, scoring and penalty clips for the stream", url: location.origin + "/pt/control.html" },
@@ -135,6 +144,13 @@ function hub() {
   listen(DOC, (d) => { const s = unpack(d); if (!s) return; const w = s.weights[s.idx];
     $("now").textContent = `${s.home.name} ${s.team.h} – ${s.team.a} ${s.away.name} · ${w} lbs on the mat`; }, () => {}, 5000);
   prInit();
+  const busy = (b, on) => { b.disabled = on; b.style.opacity = on ? ".5" : "1"; };
+  $("tdLoad").onclick = async (e) => { busy(e.target, true); const r = await loadTestData(); busy(e.target, false); toast(`Loaded ${r.teams} test teams and ${r.duals} duals`); };
+  $("tdLive").onclick = async (e) => {
+    if (!confirm("Replace the dual on the mat with Ozark Test vs Stonebrook? Only do this when no real dual is being scored.")) return;
+    busy(e.target, true); await loadTestData({ liveDual: true }); busy(e.target, false); toast("Test dual is on the mat. Open the scorer.");
+  };
+  $("tdDel").onclick = async (e) => { if (!confirm("Remove all test teams and test duals?")) return; busy(e.target, true); const n = await removeTestData(); busy(e.target, false); toast(`Removed test teams and ${n} test duals`); };
 }
 
 // ---- Press Row links ----
