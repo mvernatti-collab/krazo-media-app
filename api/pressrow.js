@@ -12,6 +12,11 @@
 const HOSTS = {
   "hoops.pressrowapps.com": "hoops",
   "gridiron.pressrowapps.com": "gridiron",
+  // Press Row's newer per-sport domains
+  "pressrowhoops.com": "hoops2",
+  "www.pressrowhoops.com": "hoops2w",
+  "pressrowgridiron.com": "gridiron2",
+  "www.pressrowgridiron.com": "gridiron2w",
 };
 
 const SHIM = (debug, gameId, prefix) => String.raw`<script>

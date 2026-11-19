@@ -115,7 +115,7 @@ Clicking a button writes the `pt/live` doc in Firestore. The overlay listens to 
 
 ## Press Row relay for Production Truck
 
-Production Truck's built-in browser is an older Safari engine (it has no BroadcastChannel, for one). `api/pressrow.js` loads a Press Row overlay page on the server, sends its data calls through krazomedia.com (the `/prx` rewrites in `vercel.json`), and adds compatibility fixes.
+Works with Press Row's old hosts (`hoops.pressrowapps.com`, `gridiron.pressrowapps.com`) and the newer domains (`pressrowhoops.com`, `pressrowgridiron.com`). Production Truck's built-in browser is an older Safari engine (it has no BroadcastChannel, for one). `api/pressrow.js` loads a Press Row overlay page on the server, sends its data calls through krazomedia.com (the `/prx` rewrites in `vercel.json`), and adds compatibility fixes.
 
 In PT's HTML Embed, use:
 
