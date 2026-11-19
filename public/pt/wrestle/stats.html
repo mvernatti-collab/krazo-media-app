@@ -48,6 +48,7 @@ td.w{color:#7ee2a0;font-weight:700}
   <button id="reload">Refresh</button>
 </header>
 <main>
+  <div id="st" style="color:var(--mute);font-size:13px;margin:0 2px 10px"></div>
   <div class="kpi" id="kpi"></div>
   <div class="card"><div class="lbl">Wrestlers <span style="text-transform:none;letter-spacing:0">· click a column to sort, click a wrestler for their matches</span></div><table id="wTbl"></table></div>
   <div class="card" id="detail" style="display:none"></div>
@@ -70,7 +71,12 @@ const COLS = [
 
 async function load() {
   $("wTbl").innerHTML = "<tr><td>Loading…</td></tr>";
+  $("st").textContent = "Loading saved duals…";
   DUALS = await loadDuals();
+  const i = loadDuals.info || {};
+  $("st").innerHTML = i.error ? `<span style="color:#ff9a9a">${esc(i.error)}. Check the internet connection and tap Refresh.</span>`
+    : !i.listed ? "No saved duals yet. Finish a match in the scorer (tap a result under End match), or load test data from the Broadcast Hub."
+    : `${i.loaded} saved dual${i.loaded === 1 ? "" : "s"} · updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` + (i.loaded < i.listed ? ` · ${i.listed - i.loaded} couldn't load` : "");
   build();
 }
 function build() {
