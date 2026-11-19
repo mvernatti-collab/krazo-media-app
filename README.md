@@ -135,7 +135,9 @@ Placement options (add to the address, measured in 1920×1080 pixels):
 
 ## Wrestling Press Row (our own scorer + PT overlay)
 
-- **Scorer (tablet/laptop at the table):** `/pt/wrestle/score.html`
+- **Scorer (tablet/laptop at the table):** `/pt/wrestle/score.html`: Match / Lineup / Teams tabs. Buttons follow position (neutral → takedown; top → near falls and pin; bottom → escape and reversal). Every tap is logged as an event, and score, position and penalty counts are rebuilt from the log.
+- **Stats:** `/pt/wrestle/stats.html`: season totals per wrestler, dual box scores, CSV export
+- Saved data: `pt/wrestle-teams` (rosters), `pt/wrestle-duals` (index), `pt/wrestle-dual-<id>` (each dual with full event logs)
 - **PT overlay (HTML Embed, fullscreen):** `/pt/wrestle/overlay.html`
   - `?pos=bl|br|tl|tr` puts the scorebug in a corner (default bottom-left)
   - `?demo=1` shows sample data, `?bg=1` adds a green test background, `?debug=1` shows a status box

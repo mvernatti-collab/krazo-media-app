@@ -107,3 +107,13 @@ export async function listen(id, cb, onState = () => {}, pollMs = 1000) {
     startPolling();
   }
 }
+
+// One-time read of a doc in the pt collection (null if missing).
+export async function read(id) {
+  const s = await loadSdk();
+  if (s) {
+    try { const snap = await s.fs.getDoc(s.fs.doc(s.db, "pt", id)); return snap.exists() ? snap.data() : null; }
+    catch (e) { console.warn("[pt] getDoc failed, trying REST", e); }
+  }
+  return restGet(id);
+}
