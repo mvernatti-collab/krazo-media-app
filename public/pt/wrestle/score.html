@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scorer">
+<link rel="apple-touch-icon" href="/pt/krazo.png">
+<meta name="theme-color" content="#0c0c0f">
 <title>Wrestling Scorer · Krazo Media</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
@@ -58,6 +63,7 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 .hint.on{display:flex}
 .acts{display:grid;grid-template-columns:1fr minmax(280px,1.05fr) 1fr;gap:12px;align-items:start}
 .acts>.card{margin-bottom:0}
+.board .mid{order:2}.acts .logc{order:2}
 .act{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;align-content:start}
 .act button{padding:18px 6px;font-weight:700;font-size:16px}
 .act button b{display:block;font-family:Anton,Impact,sans-serif;font-weight:400;font-size:30px}
@@ -94,7 +100,7 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 .modal .box .opts{display:grid;gap:8px;margin-top:12px}
 .modal .box .opts button{padding:16px;font-size:18px;font-weight:700}
 @media (max-width:980px){.acts{grid-template-columns:1fr 1fr}.acts .logc{grid-column:1/-1;order:3}}
-@media (max-width:820px){.board{grid-template-columns:1fr 1fr}.mid{grid-column:1/-1;order:-1}.wr .sc{font-size:70px}.res{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:820px){.board{grid-template-columns:1fr 1fr}.board .mid{grid-column:1/-1;order:-1}.wr .sc{font-size:70px}.res{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
@@ -104,6 +110,7 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
     <button data-tab="match" class="on">Match</button>
     <button data-tab="lineup">Lineup</button>
     <button data-tab="teams">Teams</button>
+    <button data-tab="share" id="shareTab" style="display:none">Share</button>
     <button onclick="window.open('/pt/wrestle/stats.html','_blank')">Stats ↗</button>
   </div>
   <div class="sp"></div>
@@ -223,6 +230,11 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 </section>
 
 <!-- ================= TEAMS ================= -->
+<section id="tab-share">
+  <div class="card"><div class="lbl">Links for tonight</div><div style="color:var(--mute);font-size:13px">Crew links open with no PIN. Open the Broadcast Hub to reset them or to grab Press Row links.</div>
+  <div class="row" style="margin-top:8px"><button onclick="window.open('/pt/hub.html','_blank')">Broadcast Hub ↗</button></div></div>
+  <div id="shareLinks"></div>
+</section>
 <section id="tab-teams">
   <div class="card">
     <div class="lbl">Saved teams</div>
@@ -260,8 +272,10 @@ textarea{width:100%;min-height:260px;font-family:Menlo,monospace;font-size:13px}
 
 <script type="module">
 import { write, listen, read } from "/pt/pt-sync.js";
+import { gate } from "/pt/wrestle/gate.js";
+import { wrestlingLinks, renderLinks, LINK_CSS } from "/pt/wrestle/links.js";
 import { GFX, blankGfx, loadDuals, buildStats, recOf, toggleCard, dualRecord as teamDualRec, shrinkImage, logoSrc } from "/pt/wrestle/records.js";
-import { DOC, WEIGHTS, PERIODS, periodById, RESULTS, suggestResult, blankMatch, defaultState, remaining, fmtClock, matchElapsed, fmtElapsed, pack, unpack, other, bandHex, bandName, derive, SCORING } from "/pt/wrestle/core.js";
+import { DOC, WEIGHTS, PERIODS, periodById, RESULTS, suggestResult, blankMatch, defaultState, remaining, fmtClock, matchElapsed, fmtElapsed, pack, unpack, other, bandHex, bandName, derive, SCORING, CLOCK, makeSkews, localize, deviceId } from "/pt/wrestle/core.js";
 
 let S = defaultState();
 let TEAMS = {};          // saved teams: key -> {name, short, color, roster:[{wt,name}]}
@@ -300,13 +314,23 @@ function save() {
   write(DOC, pack(S)).catch(() => toast("Couldn't send. Check connection."));
   try { localStorage.setItem("krazo-wrestle", JSON.stringify(S)); } catch {}
 }
-function change(fn) { hist.push(JSON.stringify(S)); if (hist.length > 80) hist.shift(); fn(); recompute(); save(); }
+// ---- shared clock (pt/wrestle-clock): the scorer and a clock operator both run it ----
+const ME = deviceId(), SKC = makeSkews();
+let LC = null;                                   // newest clock record, in this device's time
+const boutKey = () => (S.dualId || "") + ":" + (S.weights[S.idx] || "");
+const clockKey = (m) => [m.clockMs, m.running, m.at, m.period, boutKey()].join("|");
+function pushClock() {
+  const m = S.m, c = { clockMs: Math.round(m.clockMs), running: !!m.running, at: m.at || Date.now(), period: m.period, bout: boutKey(), v: Date.now(), by: ME, sent: Date.now() };
+  LC = { ...c }; write(CLOCK, c).catch(() => toast("Couldn't send the clock"));
+}
+function applyClock(c) { if (!c) return; S.m.clockMs = c.clockMs; S.m.running = c.running; S.m.at = c.at; }
+function change(fn) { hist.push(JSON.stringify(S)); if (hist.length > 80) hist.shift(); const ck = clockKey(S.m); fn(); recompute(); save(); if (clockKey(S.m) !== ck) pushClock(); }
 $("undo").onclick = () => {
   if (!hist.length) return toast("Nothing to undo");
   const keepPop = S.pop.n, keepRes = S.res.n;
   S = JSON.parse(hist.pop());
   S.pop.n = Math.max(S.pop.n, keepPop); S.res.n = Math.max(S.res.n, keepRes); // never re-fire old graphics
-  recompute(); save(); saveDual(); toast("Undone");
+  recompute(); save(); pushClock(); saveDual(); toast("Undone");
 };
 function dualRecord() {
   return { id: S.dualId, date: S.date || today(), division: S.division, home: S.home, away: S.away, weights: S.weights, lineup: S.lineup, team: S.team, bouts: S.bouts };
@@ -388,7 +412,7 @@ function render() {
   $("wrH").style.borderColor = bandHex(S.bands.h); $("wrA").style.borderColor = bandHex(S.bands.a);
   const lo = S.flip ? { h: 3, a: 1 } : { h: 1, a: 3 };
   $("wrH").style.order = lo.h; $("wrA").style.order = lo.a; $("actH").parentElement.style.order = lo.h; $("actA").parentElement.style.order = lo.a;
-  document.querySelector(".board .mid").style.order = 2; document.querySelector(".acts .logc").style.order = 2;
+
   $("penH").innerHTML = penHtml("h"); $("penA").innerHTML = penHtml("a");
   $("penHl").textContent = "Penalties on " + S.home.short; $("penAl").textContent = "Penalties on " + S.away.short;
   $("posCur").textContent = S.m.pos === "N" ? "Neutral" : team(S.m.pos).short + " top";
@@ -681,6 +705,12 @@ $("dualList").addEventListener("click", async (e) => {
 });
 
 // ---------- connect ----------
+document.head.insertAdjacentHTML("beforeend", `<style>${LINK_CSS}</style>`);
+const ACC = await gate("score", "Scorer");
+if (ACC.director) {
+  $("shareTab").style.display = "inline-block";
+  renderLinks($("shareLinks"), wrestlingLinks((ACC.access && ACC.access.codes) || {}), toast);
+}
 let lastBeat = 0, prevAlive;
 listen(DOC, (d) => {
   const s = unpack(d);
@@ -689,8 +719,15 @@ listen(DOC, (d) => {
     if (s && s.v) S = s; else { try { const l = JSON.parse(localStorage.getItem("krazo-wrestle")); if (l) S = l; } catch {} }
     ensure(); recompute(); save(); fillLineup(); return;
   }
-  if (s && s.v > S.v) { S = s; ensure(); recompute(); render(); } // another scorer device changed something
+  if (s && s.v > S.v) { S = s; ensure(); recompute(); if (LC && LC.bout === boutKey() && LC.period === S.m.period) applyClock(LC); render(); } // another scorer device changed something
 }, (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live link" : st === "polling" ? "Backup link" : "No connection"; });
+listen(CLOCK, (d) => {
+  if (!d || !d.v) return;
+  SKC.see(d.by, d.sent);
+  if (d.by === ME || (LC && d.v <= LC.v)) return;  // our own write, or older
+  LC = { ...localize(d, SKC), bout: d.bout };
+  if (LC.bout === boutKey() && LC.period === S.m.period) { applyClock(LC); render(); }
+}, () => {}, 1000, { backup: true });
 listen("wrestle-teams", (d) => {
   const t = unpack(d);
   TEAMS = (t && t.teams) || {};

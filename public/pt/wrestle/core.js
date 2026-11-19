@@ -160,3 +160,26 @@ export function derive(ev = []) {
   });
   return { h: sc.h, a: sc.a, pos, pen, dq, list };
 }
+
+// ---- Shared clock ----
+// The clock lives in its own small doc (pt/wrestle-clock) so a clock operator and the
+// scorer can both run it without overwriting each other's scoring. Flat fields:
+// {clockMs, running, at, period, v, by, sent}. `at` is in the writer's clock (`by`).
+export const CLOCK = "wrestle-clock";
+export function makeSkews() {
+  const m = {};
+  return { see(by, sent) { (m[by] = m[by] || makeSkew()).see(sent); }, now(by) { return (m[by] || makeSkew()).now(); } };
+}
+// Convert a clock record written on another device into this device's time.
+export function localize(c, skews) {
+  if (!c) return null;
+  const shift = Date.now() - skews.now(c.by); // this device minus the writer
+  return { clockMs: +c.clockMs || 0, running: !!c.running, at: (+c.at || 0) + shift, period: c.period || "1", bout: c.bout || "", v: +c.v || 0, by: c.by };
+}
+// The clock to show: the shared clock record when it belongs to the bout and period
+// on the mat, otherwise the clock saved with the match.
+export function liveClock(S, C) {
+  const key = (S.dualId || "") + ":" + (S.weights[S.idx] || "");
+  return C && C.bout === key && C.period === S.m.period ? C : S.m;
+}
+export const deviceId = () => { try { let id = sessionStorage.getItem("krazo-dev"); if (!id) { id = Math.random().toString(36).slice(2, 10); sessionStorage.setItem("krazo-dev", id); } return id; } catch { return Math.random().toString(36).slice(2, 10); } };

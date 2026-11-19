@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Broadcast">
+<link rel="apple-touch-icon" href="/pt/krazo.png">
+<meta name="theme-color" content="#0c0c0f">
 <title>Announcer View · Krazo Media Wrestling</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
@@ -79,8 +84,8 @@ tr.cur td{background:#20202a}
 </main>
 <script type="module">
 import { listen } from "/pt/pt-sync.js";
-import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, defaultState, derive, bandHex, bandName, makeSkew } from "/pt/wrestle/core.js";
-const SK = makeSkew();
+import { DOC, RESULTS, periodById, remaining, fmtClock, unpack, defaultState, derive, bandHex, bandName, makeSkew, CLOCK, makeSkews, localize, liveClock } from "/pt/wrestle/core.js";
+const SK = makeSkew(), SKC = makeSkews(); let CL = null;
 import { loadDuals, buildStats, rkey } from "/pt/wrestle/records.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -136,7 +141,9 @@ function paint() {
     return `<tr class="${w === cur ? "cur" : ""}"><td class="wt">${esc(w)}</td><td class="${b && b.w === "h" ? "win" : ""}">${esc(l.h || "Open")}</td><td class="${b && b.w === "a" ? "win" : ""}">${esc(l.a || "Open")}</td><td class="r">${b ? esc(resTxt(b)) + " · +" + b.tp + " " + esc(team(b.w).short) : ""}</td></tr>`; }).join("");
   tick();
 }
-function tick() { $("cClk").textContent = fmtClock(remaining(S.m, SK.now())); $("cClk").classList.toggle("run", !!S.m.running); }
+function tick() { const c = liveClock(S, CL); $("cClk").textContent = fmtClock(remaining(c, c === S.m ? SK.now() : Date.now())); $("cClk").classList.toggle("run", !!c.running); }
+listen(CLOCK, (d) => { if (!d || !d.v) return; SKC.see(d.by, d.sent); if (CL && d.v <= CL.v) return; CL = { ...localize(d, SKC), bout: d.bout }; }, () => {}, 1000, { backup: true });
+
 setInterval(tick, 100);
 listen(DOC, (d) => { if (d) SK.see(d.sent); const s = unpack(d); if (s && (s.v || 0) >= (S.v || 0)) { S = s; paint(); } }, (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live" : st === "polling" ? "Backup link" : "No connection"; }, 1000, { backup: true });
 const refresh = async () => { STATS = buildStats(await loadDuals().catch(() => [])); paint(); };

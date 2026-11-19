@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Krazo Hub">
+<link rel="apple-touch-icon" href="/pt/krazo.png">
+<meta name="theme-color" content="#0c0c0f">
+<title>Broadcast Hub · Krazo Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<style id="base">
+:root{--red:#ED1C24;--bg:#0c0c0f;--card:#17171c;--line:#2b2b32;--mute:#9a9aa3}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+.H{font-family:Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-weight:400}
+header{position:sticky;top:0;z-index:5;background:#0c0c0ff2;border-bottom:1px solid var(--line);padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+header img{height:30px}
+.sp{flex:1}
+main{padding:14px;max-width:1150px;margin:0 auto}
+h2{font:400 30px Anton,Impact,sans-serif;text-transform:uppercase;margin:22px 0 4px}
+.sub{color:var(--mute);margin:0 0 12px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+button,input,select{font:inherit;color:#fff;background:#24242b;border:1px solid #34343c;border-radius:10px;padding:10px 12px}
+button{cursor:pointer;font-weight:600}
+button.red{background:var(--red);border-color:var(--red)}
+button.ghost{background:transparent}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input{min-width:0}
+.lbl{font:700 12px -apple-system,Arial;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin:0 0 8px}
+.now{font-size:22px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#fff;color:#000;padding:10px 16px;border-radius:999px;font-weight:700;display:none;z-index:20}
+.gatebox{max-width:380px;margin:60px auto;text-align:center}
+.gatebox input{width:100%;font-size:22px;text-align:center;letter-spacing:.3em;margin-top:8px}
+.gatebox button{width:100%;margin-top:10px;font-size:18px;padding:14px}
+.prl{display:grid;gap:10px}
+</style>
+</head>
+<body>
+<header>
+  <img src="/pt/krazo.png" alt="Krazo Media">
+  <div class="H" style="font-size:22px">Broadcast Hub</div>
+  <div class="sp"></div>
+  <button id="out" class="ghost" style="display:none">Sign out</button>
+</header>
+<main id="app"></main>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { listen, read, write } from "/pt/pt-sync.js";
+import { DOC, unpack, pack } from "/pt/wrestle/core.js";
+import { loadAccess, saveAccess, isDirector, signIn, signOut, sha, newCode } from "/pt/wrestle/gate.js";
+import { wrestlingLinks, renderLinks, LINK_CSS, qrSvg } from "/pt/wrestle/links.js";
+document.head.insertAdjacentHTML("beforeend", `<style>${LINK_CSS}</style>`);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const toast = (t) => { const e = $("toast"); e.textContent = t; e.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => (e.style.display = "none"), 1700); };
+let A = null;
+
+async function start() {
+  A = await loadAccess();
+  if (!A || !A.pin) return setup();
+  if (!isDirector(A)) return login();
+  hub();
+}
+function setup() {
+  $("app").innerHTML = `<form class="gatebox" id="f"><div class="H" style="font-size:32px">Set up the hub</div>
+    <p class="sub">Choose a director PIN. You'll use it to open this hub and any crew page on a new device. Crew get their own links and don't need it.</p>
+    <input type="password" inputmode="numeric" id="p1" placeholder="New PIN" autocomplete="new-password">
+    <input type="password" inputmode="numeric" id="p2" placeholder="Same PIN again" autocomplete="new-password">
+    <button class="red">Save PIN</button><div id="m" style="color:#ff9a9a;margin-top:8px"></div></form>`;
+  $("f").onsubmit = async (e) => {
+    e.preventDefault();
+    const a = $("p1").value.trim(), b = $("p2").value.trim();
+    if (a.length < 4) return ($("m").textContent = "Use at least 4 digits.");
+    if (a !== b) return ($("m").textContent = "Those didn't match.");
+    A = await saveAccess({ pin: await sha(a), codes: { score: newCode(), clock: newCode(), gfx: newCode() } });
+    await signIn(A, a); hub();
+  };
+}
+function login() {
+  $("app").innerHTML = `<form class="gatebox" id="f"><div class="H" style="font-size:32px">Director sign in</div>
+    <p class="sub">Enter the director PIN to see crew links.</p>
+    <input type="password" inputmode="numeric" id="p" placeholder="Director PIN" autocomplete="current-password">
+    <button class="red">Sign in</button><div id="m" style="color:#ff9a9a;margin-top:8px"></div></form>`;
+  setTimeout(() => $("p").focus(), 50);
+  $("f").onsubmit = async (e) => { e.preventDefault(); if (await signIn(A, $("p").value.trim())) hub(); else $("m").textContent = "That PIN didn't match."; };
+}
+
+function hub() {
+  $("out").style.display = "inline-block";
+  $("out").onclick = () => { signOut(); location.reload(); };
+  $("app").innerHTML = `
+    <h2>Wrestling</h2>
+    <p class="sub">Crew links open their page with no PIN. Share them by text, AirDrop or QR code. Reset them any time and the old ones stop working.</p>
+    <div class="card"><div class="lbl">Live dual</div><div class="now H" id="now">Waiting for the scorer</div></div>
+    <div id="wl"></div>
+    <div class="row" style="margin-top:12px">
+      <button id="reset">Reset crew links</button>
+      <button id="chpin" class="ghost">Change director PIN</button>
+    </div>
+
+    <h2>Press Row (basketball, football)</h2>
+    <p class="sub">Paste a Press Row overlay link and get the version that works in Production Truck. Saved links stay here for next time.</p>
+    <div class="card">
+      <div class="row"><input id="prName" placeholder="Name, e.g. Boys basketball" style="flex:1 1 180px"><input id="prUrl" placeholder="https://pressrowhoops.com/api/broadcast/live/…" style="flex:3 1 320px"></div>
+      <div class="row" style="margin-top:8px">
+        <label>Scoreboard <select id="prSb"><option value="">Press Row default</option><option>top</option><option>top-left</option><option>top-right</option><option>bottom</option><option>bottom-left</option><option>bottom-right</option></select></label>
+        <label>Size <select id="prSc"><option value="">100%</option><option>0.7</option><option>0.8</option><option>0.9</option><option>1.1</option><option>1.25</option></select></label>
+        <button id="prSave" class="red">Save link</button>
+      </div>
+    </div>
+    <div class="prl" id="prl"></div>
+
+    <h2>Other tools</h2>
+    <div id="ol"></div>`;
+  renderLinks($("wl"), wrestlingLinks(A.codes), toast);
+  renderLinks($("ol"), [
+    { title: "Wrestling explainer clips", who: "Rules, scoring and penalty clips for the stream", url: location.origin + "/pt/control.html" },
+    { title: "PT browser check", who: "Tests what Production Truck's browser supports", url: location.origin + "/pt/diag.html", noqr: true },
+  ], toast);
+  $("reset").onclick = async () => {
+    if (!confirm("Make new crew links? Anyone using the old scorer, clock or graphics links will need the new ones.")) return;
+    A.codes = { score: newCode(), clock: newCode(), gfx: newCode() }; await saveAccess(A);
+    renderLinks($("wl"), wrestlingLinks(A.codes), toast); toast("New crew links ready");
+  };
+  $("chpin").onclick = async () => {
+    const a = prompt("New director PIN (at least 4 digits):"); if (!a) return;
+    if (a.trim().length < 4) return alert("Use at least 4 digits.");
+    if (prompt("Type it again:") !== a) return alert("Those didn't match.");
+    A.pin = await sha(a.trim()); await saveAccess(A); await signIn(A, a.trim()); toast("PIN changed");
+  };
+  listen(DOC, (d) => { const s = unpack(d); if (!s) return; const w = s.weights[s.idx];
+    $("now").textContent = `${s.home.name} ${s.team.h} – ${s.team.a} ${s.away.name} · ${w} lbs on the mat`; }, () => {}, 5000);
+  prInit();
+}
+
+// ---- Press Row links ----
+let PR = [];
+function relayUrl(x) {
+  let u = location.origin + "/api/pressrow?u=" + x.url.trim();
+  if (x.sb) u += "&sb=" + x.sb;
+  if (x.sc) u += "&sbscale=" + x.sc;
+  return u;
+}
+function paintPR() {
+  $("prl").innerHTML = PR.map((x, i) => `<div class="card"><div class="row"><div class="H" style="font-size:22px;flex:1">${esc(x.name || "Press Row")}</div><button data-d="${i}" class="ghost">Remove</button></div><div id="prk${i}"></div></div>`).join("") || '<div class="sub">No saved Press Row links yet.</div>';
+  PR.forEach((x, i) => renderLinks($("prk" + i), [{ title: "PT link", who: (x.sb ? x.sb + " · " : "") + (x.sc ? Math.round(x.sc * 100) + "% · " : "") + "paste into the HTML Embed", url: relayUrl(x) }], toast));
+}
+function prInit() {
+  listen("hub-pressrow", (d) => { const x = unpack(d); PR = (x && x.list) || []; paintPR(); }, () => {}, 5000);
+  $("prSave").onclick = async () => {
+    const url = $("prUrl").value.trim();
+    if (!/^https:\/\/([a-z0-9-]+\.)*pressrow(apps|hoops|gridiron)\.com\//i.test(url)) return alert("That doesn't look like a Press Row overlay link.");
+    PR.unshift({ name: $("prName").value.trim(), url, sb: $("prSb").value, sc: $("prSc").value });
+    $("prUrl").value = ""; $("prName").value = ""; paintPR();
+    await write("hub-pressrow", pack({ v: Date.now(), list: PR })); toast("Saved");
+  };
+  $("prl").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-d]"); if (!b || !confirm("Remove this link?")) return;
+    PR.splice(+b.dataset.d, 1); paintPR(); await write("hub-pressrow", pack({ v: Date.now(), list: PR }));
+  });
+}
+start();
+</script>
+</body>
+</html>

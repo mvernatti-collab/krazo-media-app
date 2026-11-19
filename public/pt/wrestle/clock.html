@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mat Clock">
+<link rel="apple-touch-icon" href="/pt/krazo.png">
+<meta name="theme-color" content="#0c0c0f">
+<title>Clock Operator · Krazo Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<style>
+:root{--red:#ED1C24;--bg:#0c0c0f;--card:#17171c;--line:#2b2b32;--mute:#9a9aa3}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.H{font-family:Anton,Impact,sans-serif;text-transform:uppercase;letter-spacing:.02em;font-weight:400}
+header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+header img{height:26px}
+.pill{font:700 11px -apple-system,Arial;letter-spacing:.06em;text-transform:uppercase;padding:5px 9px;border-radius:999px;background:#222229;color:#bbb;margin-left:auto}
+.pill.ok{background:#12351f;color:#7ee2a0}.pill.warn{background:#3a2e10;color:#ffd27a}.pill.bad{background:#3a1414;color:#ff9a9a}
+.info{padding:12px 14px;display:flex;align-items:center;gap:12px}
+.info .wt{font-size:30px}
+.info .who{flex:1;min-width:0;font-size:15px;line-height:1.3}
+.info .who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info .sc{font-size:34px;white-space:nowrap}
+main{flex:1;display:flex;flex-direction:column;padding:0 14px 14px;gap:12px;min-height:0}
+#face{flex:1;min-height:200px;border:0;border-radius:22px;background:#17171c;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;touch-action:manipulation}
+#face.run{background:#0f2a19}
+#face .per{font-size:26px;color:var(--mute)}
+#face .t{font-size:min(34vw,240px);line-height:.95;font-variant-numeric:tabular-nums}
+#face .act{font:800 18px -apple-system,Arial;letter-spacing:.14em;text-transform:uppercase;padding:10px 22px;border-radius:999px;background:var(--red)}
+#face.run .act{background:#fff;color:#000}
+.adj{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+button{font:700 18px -apple-system,Arial;color:#fff;background:#24242b;border:1px solid #34343c;border-radius:14px;padding:18px 6px;cursor:pointer;touch-action:manipulation}
+button:active{transform:scale(.97)}
+.note{color:var(--mute);font-size:13px;text-align:center}
+.toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:#fff;color:#000;padding:10px 16px;border-radius:999px;font-weight:700;display:none;z-index:20}
+@media (orientation:landscape) and (max-height:560px){#face .t{font-size:min(22vw,40vh)}.info{padding:6px 14px}}
+</style>
+</head>
+<body>
+<header><img src="/pt/krazo.png" alt="Krazo Media"><div class="H" style="font-size:20px">Mat clock</div><div class="pill" id="pLink">Connecting</div></header>
+<div class="info"><div class="wt H" id="wt">—</div><div class="who"><b id="nH"></b><b id="nA"></b></div><div class="sc H" id="sc">0–0</div></div>
+<main>
+  <button id="face" aria-label="Start or stop the clock"><div class="per H" id="per">P1</div><div class="t H" id="t">2:00</div><div class="act" id="act">Tap to start</div></button>
+  <div class="adj"><button data-d="-1000">−1s</button><button data-d="1000">+1s</button><button data-d="-100">−0.1</button><button data-d="100">+0.1</button></div>
+  <button id="set">Set the time</button>
+  <div class="note">Periods and scoring are on the scorer. Space bar also starts and stops.</div>
+</main>
+<div class="toast" id="toast"></div>
+<script type="module">
+import { listen, write } from "/pt/pt-sync.js";
+import { DOC, periodById, remaining, fmtClock, unpack, defaultState, makeSkew, CLOCK, makeSkews, localize, liveClock, deviceId } from "/pt/wrestle/core.js";
+import { gate } from "/pt/wrestle/gate.js";
+await gate("clock", "Clock operator");
+const $ = (id) => document.getElementById(id);
+const toast = (t) => { const e = $("toast"); e.textContent = t; e.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => (e.style.display = "none"), 1500); };
+const ME = deviceId(), SK = makeSkew(), SKC = makeSkews();
+let S = defaultState(), CL = null, ready = false;
+
+const boutKey = () => (S.dualId || "") + ":" + (S.weights[S.idx] || "");
+function cur() { const c = liveClock(S, CL); return { c, t: c === S.m ? SK.now() : Date.now() }; }
+function send(clockMs, running) {
+  const now = Date.now();
+  const rec = { clockMs: Math.max(0, Math.round(clockMs)), running, at: now, period: S.m.period, bout: boutKey(), v: now, by: ME, sent: now };
+  CL = { ...rec }; paint();
+  write(CLOCK, rec).catch(() => toast("Couldn't send. Check connection."));
+  if (navigator.vibrate) navigator.vibrate(18);
+}
+function toggle() {
+  if (!ready) return;
+  const { c, t } = cur(), r = remaining(c, t);
+  if (c.running) send(r, false); else if (r > 0) send(r, true); else toast("Clock is at 0:00. Set the time first.");
+}
+$("face").onclick = toggle;
+document.addEventListener("keydown", (e) => { if (e.code === "Space") { e.preventDefault(); toggle(); } });
+document.querySelectorAll("[data-d]").forEach((b) => (b.onclick = () => { const { c, t } = cur(); send(remaining(c, t) + +b.dataset.d, c.running); }));
+$("set").onclick = () => {
+  const { c, t } = cur(), v = prompt("Clock time (m:ss or seconds):", fmtClock(remaining(c, t)));
+  if (v === null) return;
+  const m = v.trim().match(/^(\d+):(\d{1,2}(?:\.\d)?)$/) || v.trim().match(/^()(\d+(?:\.\d)?)$/);
+  if (!m) return toast("Use m:ss, like 1:23");
+  send(((+m[1] || 0) * 60 + +m[2]) * 1000, false);
+};
+function paint() {
+  const w = S.weights[S.idx], lu = S.lineup[w] || {};
+  $("wt").textContent = w ? w + " lbs" : "—";
+  $("nH").textContent = (lu.h || S.home.name) + " · " + S.home.short; $("nA").textContent = (lu.a || S.away.name) + " · " + S.away.short;
+  $("sc").textContent = `${S.m.h}–${S.m.a}`;
+  $("per").textContent = periodById(S.m.period).label;
+  tick();
+}
+function tick() {
+  const { c, t } = cur(), r = remaining(c, t);
+  $("t").textContent = fmtClock(r);
+  $("face").classList.toggle("run", !!c.running);
+  $("act").textContent = c.running ? "Tap to stop" : r > 0 ? "Tap to start" : "Period over";
+  if (c.running && r <= 0 && c.by === ME) send(0, false); // the device that started it stops it at zero
+}
+setInterval(tick, 100);
+listen(DOC, (d) => { if (d) SK.see(d.sent); const s = unpack(d); if (s && (s.v || 0) >= (S.v || 0)) { S = s; ready = true; paint(); } },
+  (st) => { const p = $("pLink"); p.className = "pill " + (st === "live" ? "ok" : st === "polling" ? "warn" : "bad"); p.textContent = st === "live" ? "Live" : st === "polling" ? "Backup link" : "No connection"; }, 1000, { backup: true });
+listen(CLOCK, (d) => { if (!d || !d.v) return; SKC.see(d.by, d.sent); if (d.by === ME || (CL && d.v <= CL.v)) return; CL = { ...localize(d, SKC), bout: d.bout }; paint(); }, () => {}, 1000, { backup: true });
+// keep the phone screen awake while this is open
+async function wake() { try { if (navigator.wakeLock) await navigator.wakeLock.request("screen"); } catch {} }
+wake(); document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") wake(); });
+</script>
+</body>
+</html>
