@@ -8,7 +8,11 @@
 //
 //   /api/prstream?h=hoops&p=/api/games/<gameId>/broadcast-stream
 
-const HOSTS = { hoops: "hoops.pressrowapps.com", gridiron: "gridiron.pressrowapps.com" };
+const HOSTS = {
+  hoops: "hoops.pressrowapps.com", gridiron: "gridiron.pressrowapps.com",
+  hoops2: "pressrowhoops.com", hoops2w: "www.pressrowhoops.com",
+  gridiron2: "pressrowgridiron.com", gridiron2w: "www.pressrowgridiron.com",
+};
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 export default async function handler(req, res) {

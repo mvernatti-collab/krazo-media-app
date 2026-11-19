@@ -1,6 +1,28 @@
 {
   "rewrites": [
-    { "source": "/prx/hoops/:path*", "destination": "https://hoops.pressrowapps.com/:path*" },
-    { "source": "/prx/gridiron/:path*", "destination": "https://gridiron.pressrowapps.com/:path*" }
+    {
+      "source": "/prx/hoops/:path*",
+      "destination": "https://hoops.pressrowapps.com/:path*"
+    },
+    {
+      "source": "/prx/gridiron/:path*",
+      "destination": "https://gridiron.pressrowapps.com/:path*"
+    },
+    {
+      "source": "/prx/hoops2/:path*",
+      "destination": "https://pressrowhoops.com/:path*"
+    },
+    {
+      "source": "/prx/hoops2w/:path*",
+      "destination": "https://www.pressrowhoops.com/:path*"
+    },
+    {
+      "source": "/prx/gridiron2/:path*",
+      "destination": "https://pressrowgridiron.com/:path*"
+    },
+    {
+      "source": "/prx/gridiron2w/:path*",
+      "destination": "https://www.pressrowgridiron.com/:path*"
+    }
   ]
 }
